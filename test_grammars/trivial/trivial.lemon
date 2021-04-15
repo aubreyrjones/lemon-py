@@ -1,0 +1,28 @@
+%name {LemonPyParse}
+%token_type {Token}
+%extra_argument { Parser *p }
+
+%include {
+#include <stdio.h>
+#include <assert.h>
+#include <Parser.h>
+}
+
+%syntax_error {
+  p->error();
+}
+
+%parse_failure {
+  p->error();
+}
+
+%parse_accept {
+  p->success();
+}
+
+toplevel ::= int_list.
+
+int_list ::= integer.
+int_list ::= int_list integer.
+
+integer ::= INT_LIT.
