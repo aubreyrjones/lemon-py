@@ -1,0 +1,16 @@
+%name {LemonPyParse}
+%token_type {_parser_impl::Token}
+%extra_argument { _parser_impl::Parser *p }
+
+%syntax_error {
+  p->error();
+}
+
+%parse_failure {
+  p->error();
+}
+
+%parse_accept {
+  p->success();
+}
+

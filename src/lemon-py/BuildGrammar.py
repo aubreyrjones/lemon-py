@@ -2,22 +2,77 @@ import subprocess
 import tempfile
 import os.path
 import os
+import pybind11
+
+def data_file(*filename: str):
+    return os.path.join(os.path.abspath(os.path.dirname(__file__)), *filename)
 
 
-LEMON = os.path.join(os.path.dirname(__file__), "lemon")
-LEMON_TEMPLATE = os.path.join(os.path.dirname(__file__), "lempar.c")
+GRAMMAR_HEADER_FILE = data_file("header.lemon")
+PARSER_IMPL_FILE = data_file("ParserImpl.cpp")
 
-def build_grammar(grammar_file_path: str):
+LEMON = data_file("lemon")
+LEMON_TEMPLATE = data_file("lempar.c")
+
+def gpp_command(module_name: str):
+    pyinclude = subprocess.check_output(['python3-config', '--includes']).decode().strip()
+    pylink = subprocess.check_output(['python3-config', '--ldflags']).decode().strip()
+
+    retval = list('g++ -O3 -Wall -shared -std=c++17 -fPIC'.split())
+    retval.extend(pyinclude.split())
+    retval.extend(pylink.split())
+    retval.extend([
+        f"-DPYTHON_PARSER_MODULE_NAME={module_name}",
+        f"-I{pybind11.get_include()}",
+        "concat_grammar.c",
+        "-o",
+        f"{module_name}.so"
+    ])
+    
+
+    return retval
+
+
+def concatenate_input(grammar_file_path: str):
+    with open(GRAMMAR_HEADER_FILE, 'r') as f:
+        header_text = f.read()
+    
+    with open(PARSER_IMPL_FILE, 'r') as f:
+        impl_text = f.read()
+
+    with open(os.path.abspath(grammar_file_path), 'r') as f:
+        grammar_text = f.read()
+    
+    whole_text = header_text + "\n" + f"%include {{\n{impl_text}\n}}\n" + grammar_text
+
+    return whole_text
+
+
+def write_and_build_curdir(whole_text: str, grammar_module_name: str):
+    with open('concat_grammar.lemon', 'w') as f:
+        f.write(whole_text)
+    
+    subprocess.call([LEMON, f"-T{LEMON_TEMPLATE}", "concat_grammar.lemon"]) # f"-d{str(workdir)}",
+    
+    subprocess.call(gpp_command(grammar_module_name))
+
+    print(gpp_command(grammar_module_name))
+
+
+def build_grammar(grammar_file_path: str, grammar_module_name: str, use_temp = True):
     grammar_file_path = os.path.abspath(grammar_file_path)
     print("Compiling: " + grammar_file_path)
-    outfile = os.path.splitext(os.path.basename(grammar_file_path))[0] + ".c"
+    
+    old_dir = os.path.abspath(os.curdir)
+    
     with tempfile.TemporaryDirectory() as workdir:
-        outfile = os.path.join(workdir, outfile)
-        subprocess.call([LEMON, f"-T{LEMON_TEMPLATE}", f"-d{str(workdir)}", grammar_file_path])
-        print(os.listdir(workdir))
-    #call `lemon grammar_file_path`
+        if use_temp:
+            os.chdir(workdir)
+        write_and_build_curdir(concatenate_input(grammar_file_path), grammar_module_name)
+        os.chdir(old_dir)    
+    
     pass
 
 if __name__ == '__main__':
     import sys
-    build_grammar(sys.argv[1])
+    build_grammar(sys.argv[1], 'lemon_parser', False)

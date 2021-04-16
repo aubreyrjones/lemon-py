@@ -3,3 +3,4 @@ src/crust/parse_tree.py
 .vscode
 lemon/lemon
 src/lemon-py/lem*
+src/lemon-py/elsewhere
