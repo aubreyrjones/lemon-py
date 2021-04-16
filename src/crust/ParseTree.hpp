@@ -13,4 +13,7 @@ struct ParseNode {
     std::vector<ParseNode> children;
 };
 
+
+extern ParseNode parse(std::string const& source_code);
+
 }

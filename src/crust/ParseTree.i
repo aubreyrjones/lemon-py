@@ -5,4 +5,6 @@
     #include <ParseTree.hpp>
 %}
 
+%std_optional(ParseNode);
+
 %include <ParseTree.hpp>
