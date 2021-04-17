@@ -2,6 +2,7 @@
 %token_type {_parser_impl::Token}
 %extra_argument { _parser_impl::Parser *p }
 %default_type {_parser_impl::ParseNode*}
+%default_destructor { p->drop_node($$); }
 
 %syntax_error {
   p->error();

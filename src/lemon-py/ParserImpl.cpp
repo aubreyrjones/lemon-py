@@ -28,6 +28,7 @@ namespace py = pybind11;
 
 namespace _parser_impl {
 
+
 /** Used to intern strings found by the lexer. */
 class StringTable {
 protected:
@@ -220,8 +221,12 @@ struct Lexer {
     };
 };
 
-// root of literals tree
+void _init_lexer();
+
 PTNode<int> Lexer::literals(0, std::nullopt);
+std::vector<std::regex> Lexer::skips;
+std::vector<std::tuple<std::regex, int>> Lexer::valueTypes;
+
 
 /** Either a production name or a token value. */
 using ParseValue = std::variant<std::string, Token>;
@@ -242,12 +247,14 @@ struct ParseNode {
 */
 struct Parser {
     void* lemonParser;
-    std::vector<std::unique_ptr<ParseNode>> allNodes;
+    std::unordered_map<ParseNode*, std::unique_ptr<ParseNode>> allNodes;
     StringTable stringTable;
+    Token currentToken;
 
     Parser() : lemonParser(PRSLParseAlloc(malloc)), allNodes(), stringTable() {}
 
     ~Parser() {
+        _init_lexer();
         PRSLParseFree(lemonParser, free);
     }
 
@@ -259,9 +266,21 @@ struct Parser {
         node->children.insert(node->children.end(), children);
 
         auto retval = node.get();
-        allNodes.push_back(std::move(node));
+        allNodes.emplace(retval, std::move(node));
 
         return retval;
+    }
+
+    void drop_node(ParseNode *pn) {
+        auto it = allNodes.find(pn);
+        if (it != allNodes.end()) {
+            allNodes.erase(it);
+        }
+    }
+
+    void offerToken(Token token) {
+        currentToken = token;
+	    PRSLParse(lemonParser, token.type, token, this);
     }
 
     void error() {
@@ -305,7 +324,14 @@ struct ParseNode {
     }
 };
 
-ParseNode parse_string(std::string const& source_code) {
+ParseNode parse_string(std::string const& input) {
+    // using namespace _parser_impl;
+    // Parser p;
+    // Lexer lexer(input, p.stringTable);
+
+    // while (auto tok = lexer.next()) {
+    //     p.offerToken(tok.value());
+    // }
     return ParseNode();
 }
 

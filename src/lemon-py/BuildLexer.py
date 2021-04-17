@@ -2,14 +2,17 @@ from typing import *
 
 LEXER_START = \
 '''
-struct _lexer_definitions_init {
-    _lexer_definitions_init() {
+namespace parser {
+void _init_lexer() {
+    static bool isInit = false;
+    if (isInit) return;
+    isInit = true;
+
 '''
 LEXER_END = \
 '''
-    }
-} _lexer_definitions_init_instance;
-
+} 
+} //namespace
 
 '''
 
