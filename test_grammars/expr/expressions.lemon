@@ -7,12 +7,31 @@
 ' := CHAR
 " := STRING
 
+ADD := +
+SUB := -
+MUL := *
+DIV := /
 
 FLOAT_LIT : [0-9]+\\.[0-9]
 INT_LIT : [0-9]+
 
-COMMA := ,
-
 @endlex
 
 */
+
+
+toplevel ::= expr(c1). { p->push_root(p->mn("root"))->push_back(c1); }
+
+%left ADD SUB.
+%left MUL DIV.
+
+expr(e) ::= expr(c1) ADD expr(c2). { e = p->mn("+", {c1, c2}); }
+expr(e) ::= expr(c1) SUB expr(c2). { e = p->mn("-", {c1, c2}); }
+expr(e) ::= expr(c1) MUL expr(c2). { e = p->mn("*", {c1, c2}); }
+expr(e) ::= expr(c1) DIV expr(c2). { e = p->mn("/", {c1, c2}); }
+
+expr(e) ::= FLOAT_LIT(c1). { e = p->mn(c1); }
+expr(e) ::= INT_LIT(c1). { e = p->mn(c1); }
+
+expr(e) ::= CHAR(c1). { e = p->mn(c1); }
+expr(e) ::= STRING(c1). { e = p->mn(c1); }

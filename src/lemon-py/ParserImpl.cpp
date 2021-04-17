@@ -192,6 +192,9 @@ struct Lexer {
         valueTypes.push_back(std::make_tuple(std::regex(r, std::regex::icase | std::regex::ECMAScript), tok_code));
     }
 
+    static int singleQuoteToken;
+    static int doubleQuoteToken;
+
     using siter = std::string::const_iterator;
     // == instance ==
 private:
@@ -201,6 +204,7 @@ private:
     int count;
     bool reachedEnd;
     int line = 0;
+    
 
     void advanceBy(size_t count) {
         auto oldPos = curPos;
@@ -236,6 +240,37 @@ private:
                 }
             }
         } while (skipped);
+    }
+
+    siter stringEnd(char stringDelim, siter stringStart, siter end) {
+        for (; stringStart != end; ++stringStart) {
+            if (*stringStart == '\\') {
+                if (*(stringStart + 1) == stringDelim) {
+                    stringStart++; // skip past this delim
+                }
+            }
+            else if (*stringStart == stringDelim) {
+                return stringStart;
+            }
+        }
+
+        throw std::runtime_error("Lexer error: string lexing reached end of input.");
+    }
+
+    std::optional<Token> nextString() {
+        auto n = [this] (int tokCode, char delim) {
+            if (*curPos == delim) {
+                return make_token(tokCode, stringTable, std::string(curPos, stringEnd(delim, curPos + 1, input.cend())));
+            }
+        };
+
+        if (singleQuoteToken && *curPos == '\'') {
+            return n(singleQuoteToken, '\'');
+        }
+        
+        if (doubleQuoteToken && *curPos == '"') {
+            return n(doubleQuoteToken, '"');
+        }
     }
 
     std::optional<Token> nextLiteral() {
@@ -309,6 +344,8 @@ public:
 
 void _init_lexer();
 
+int Lexer::singleQuoteToken = 0;
+int Lexer::doubleQuoteToken = 0;
 PTNode<int> Lexer::literals(0, std::nullopt);
 std::vector<std::regex> Lexer::skips;
 std::vector<std::tuple<std::regex, int>> Lexer::valueTypes;
@@ -325,7 +362,7 @@ struct ParseNode {
     int64_t line;
     std::vector<ParseNode*> children;
 
-    void push_back(ParseNode *n) { children.push_back(n); }
+    ParseNode* push_back(ParseNode *n) { children.push_back(n); return this; }
 };
 
 /**
@@ -358,6 +395,10 @@ struct Parser {
         allNodes.emplace(retval, std::move(node));
 
         return retval;
+    }
+
+    ParseNode* mn(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1) {
+        return make_node(value, children, line);
     }
 
     void drop_node(ParseNode *pn) {

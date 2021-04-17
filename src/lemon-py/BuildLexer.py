@@ -21,8 +21,8 @@ def extract_lexer_def(lemon_source: str) -> List[Tuple[str, str]]:
     if start < 0:
         raise RuntimeError("No lexer definition found.")
     end = lemon_source.find('@endlex', start)
-    lines = list(map(lambda s: tuple(s.strip().split(':')), lemon_source[start:end].splitlines()[1:]))
-    lines = list(filter(lambda t: len(t) == 2, lines))
+    lines = map(lambda s: tuple(s.strip().split(':')), lemon_source[start:end].splitlines()[1:])
+    lines = filter(lambda t: len(t) == 2, lines)
     lines = list(map(lambda t: (t[0].strip(), t[1].strip()), lines))
     return lines
 
@@ -42,7 +42,11 @@ def implement_lexer(lexer_def: List[Tuple[str, str]]) -> str:
     retval = LEXER_START[:]
     retval += '      token_name_map.emplace(0, "EOF");\n\n'
     for tok, pattern in lexer_def:
-        if tok.startswith('!'):
+        if tok.startswith('"'):
+            retval += f"      _parser_impl::Lexer::doubleQuoteToken {pattern.strip()};\n"
+        elif tok.startswith("'"):
+            retval += f"      _parser_impl::Lexer::singleQuoteToken {pattern.strip()};\n"
+        elif tok.startswith('!'):
             retval += "      " + implement_skip(pattern)
         elif pattern.startswith('='):
             retval += "      " + implement_literal(tok, pattern[1:].strip())

@@ -3,6 +3,8 @@ import tempfile
 import os.path
 import os
 import pybind11
+import site
+import shutil
 
 import BuildLexer
 
@@ -75,20 +77,24 @@ def extract_module(text: str):
         return "lemon_derived_parser"
     return linesplit[1].strip()
 
-def build_grammar(grammar_file_path: str, grammar_module_name: str = None, use_temp = True):
+def build_grammar(grammar_file_path: str, install = False, use_temp = True):
     grammar_file_path = os.path.abspath(grammar_file_path)
     print("Compiling: " + grammar_file_path)
     
     old_dir = os.path.abspath(os.curdir)
-    
+
     grammar_text = read_grammar_source(grammar_file_path)
-    if not grammar_module_name:
-        grammar_module_name = extract_module(grammar_text)
+    grammar_module_name = extract_module(grammar_text)
 
     with tempfile.TemporaryDirectory() as workdir:
         if use_temp:
             os.chdir(workdir)
         write_and_build_curdir(concatenate_input(grammar_text), grammar_module_name)
+
+        if install:
+            soname = f"{grammar_module_name}.so"
+            shutil.copy2(soname, os.path.join(site.getusersitepackages(), soname))
+
         os.chdir(old_dir)    
     
     pass
@@ -96,8 +102,8 @@ def build_grammar(grammar_file_path: str, grammar_module_name: str = None, use_t
 if __name__ == '__main__':
     import argparse
     ap = argparse.ArgumentParser(description="Build a grammar and optionally install it to the python path.")
-    ap.add_argument('--output', '-o', default='./', metavar='OUT', type=str, help="Output filename.")
+    ap.add_argument('--debug', default=False, const=True, action='store_const', help="Don't use a temp directory and don't install the language.")
     ap.add_argument('grammar_file', type=str, help="The grammar file to build.")
+    args = ap.parse_args()
 
-    import sys
-    build_grammar(sys.argv[1], None, False)
+    build_grammar(args.grammar_file, not args.debug, not args.debug)
