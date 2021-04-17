@@ -241,11 +241,18 @@ struct ParseNode {
  * Parser state, passed to the grammar actions.
 */
 struct Parser {
-    using ChildrenPack = std::initializer_list<ParseNode*>;
-
+    void* lemonParser;
     std::vector<std::unique_ptr<ParseNode>> allNodes;
+    StringTable stringTable;
 
-    ParseNode* make_node(ParseValue const& value, ChildrenPack const& children, int64_t line = -1) {
+    Parser() : lemonParser(PRSLParseAlloc(malloc)), allNodes(), stringTable() {}
+
+    ~Parser() {
+        PRSLParseFree(lemonParser, free);
+    }
+
+    using ChildrenPack = std::initializer_list<ParseNode*>;
+    ParseNode* make_node(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1) {
         auto node = std::make_unique<ParseNode>();
         node->value = value;
         node->line = line;
@@ -316,5 +323,5 @@ PYBIND11_MODULE(PYTHON_PARSER_MODULE_NAME, m) {
     .def_readonly("c", &parser::ParseNode::children, "Children.");
 }
 
-
+#define pnn(v) p->make_node(v)
 

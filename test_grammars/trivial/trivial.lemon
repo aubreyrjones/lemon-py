@@ -8,8 +8,8 @@ COMMA_BANG := ,!
 
 toplevel ::= int_list.
 
-int_list ::= integer.
-int_list ::= int_list COMMA integer.
-int_list ::= int_list COMMA_BANG integer.
+int_list(I) ::= . { I = pnn("int_list"); }
+int_list(G) ::= int_list(IL) COMMA integer(I). { IL->push_back(I); G = IL; }
+int_list(G) ::= int_list(IL) COMMA_BANG integer(I). { IL->push_back(I); G = IL; }
 
-integer ::= INT_LIT.
+integer(I) ::= INT_LIT(IL). {I = pnn(IL);}
