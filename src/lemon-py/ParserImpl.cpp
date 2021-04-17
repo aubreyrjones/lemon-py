@@ -206,16 +206,19 @@ private:
     int line = 0;
     
 
-    void advanceBy(size_t count) {
+    siter advanceBy(size_t count) {
         auto oldPos = curPos;
         std::advance(curPos, count);
         line += countLines(oldPos, curPos);
+        return oldPos;
     }
 
-    void advanceTo(siter const& newPos) {
+    siter advanceTo(siter const& newPos) {
         auto oldPos = curPos;
         curPos = newPos;
         line += countLines(oldPos, curPos);
+
+        return oldPos;
     }
 
     int countLines(siter from, siter const& to) {
@@ -245,7 +248,7 @@ private:
     siter stringEnd(char stringDelim, siter stringStart, siter end) {
         for (; stringStart != end; ++stringStart) {
             if (*stringStart == '\\') {
-                if (*(stringStart + 1) == stringDelim) {
+                if (*(stringStart + 1) == stringDelim || *(stringStart + 1) == '\\') {
                     stringStart++; // skip past this delim
                 }
             }
@@ -258,19 +261,24 @@ private:
     }
 
     std::optional<Token> nextString() {
-        auto n = [this] (int tokCode, char delim) {
-            if (*curPos == delim) {
-                return make_token(tokCode, stringTable, std::string(curPos, stringEnd(delim, curPos + 1, input.cend())), line);
+        auto n = [this] (int tokCode, char delim) -> std::optional<Token> {
+            if (tokCode && *curPos == delim) {
+                auto send = stringEnd(delim, curPos + 1, input.cend());
+                auto sstart = advanceTo(send + 1);
+                return make_token(tokCode, stringTable, std::string(sstart + 1, send), line);
             }
+            return std::nullopt;
         };
 
-        if (singleQuoteToken && *curPos == '\'') {
-            return n(singleQuoteToken, '\'');
+        if (auto s = n(singleQuoteToken, '\'')) {
+            return s;
         }
         
-        if (doubleQuoteToken && *curPos == '"') {
-            return n(doubleQuoteToken, '"');
+        if (auto s = n(doubleQuoteToken, '"')) {
+            return s;
         }
+
+        return std::nullopt;
     }
 
     std::optional<Token> nextLiteral() {
@@ -315,7 +323,11 @@ public:
             }
         }
         
-        if (auto lit = nextLiteral()) {
+        if (auto str = nextString()) {
+            count++;
+            return str;
+        }
+        else if (auto lit = nextLiteral()) {
             count++;
             return lit;
         }
@@ -450,6 +462,21 @@ py::object string_or_none(std::optional<std::string> const& v) {
     }
 }
 
+std::string sanitize(std::string in) {
+    size_t res = 0;
+    while((res = in.find('"', res)) != std::string::npos) {
+        in.erase(res, 1);
+        in.insert(res, "&quot;");
+    }
+
+    while((res = in.find('\'', res)) != std::string::npos) {
+        in.erase(res, 1);
+        in.insert(res, "&apos;");
+    }
+
+    return std::move(in);
+}
+
 struct ParseNode {
     std::optional<std::string> production;
     std::optional<std::string> tokName;
@@ -471,6 +498,7 @@ struct ParseNode {
         line = o.line;
         children = move(o.children);
         id = o.id;
+        o.id = -1;
 
         return *this;
     }
@@ -510,7 +538,7 @@ struct ParseNode {
             snprintf(buf, 1024, "node [shape=record, label=\"{<f0>line:%ld | <f1> %s }\"] %d;\n", line, production.value().c_str(), id);
         }
         else {
-            snprintf(buf, 1024, "node [shape=record, label=\"{<f0>line:%ld | { <f1> %s | <f2> %s}}\"] %d;\n", line, tokName.value().c_str(), value.value().c_str(), id);
+            snprintf(buf, 1024, "node [shape=record, label=\"{<f0>line:%ld | { <f1> %s | <f2> %s}}\"] %d;\n", line, tokName.value().c_str(), sanitize(value.value()).c_str(), id);
         }
         out << buf;
 
