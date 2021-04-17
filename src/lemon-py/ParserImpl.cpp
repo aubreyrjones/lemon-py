@@ -87,10 +87,10 @@ struct Token {
 
         char outbuf[1024]; // just do the first 1k characters
         if (valueTable) {
-            snprintf(outbuf, 1024, "Token: %s <%s>", tokenName.c_str(), value().c_str());
+            snprintf(outbuf, 1024, "%s <%s>", tokenName.c_str(), value().c_str());
         }
         else {
-            snprintf(outbuf, 1024, "Token: %s", tokenName.c_str());
+            snprintf(outbuf, 1024, "%s", tokenName.c_str());
         }
 
         return std::string(outbuf);
@@ -343,7 +343,7 @@ struct Parser {
     }
 
     void error() {
-        throw std::runtime_error("Parse error on token: " + currentToken.value());
+        throw std::runtime_error("Parse error on token: " + currentToken.toString());
     }
 
 	void success() {

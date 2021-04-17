@@ -1,6 +1,7 @@
 /*LEXDEF
 INT_LIT : [0-9]+
 COMMA := ,
+
 !whitespace : \\s
 */
 
