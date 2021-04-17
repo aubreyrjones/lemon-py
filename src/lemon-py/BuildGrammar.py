@@ -63,14 +63,27 @@ def write_and_build_curdir(whole_text: str, grammar_module_name: str):
     
     subprocess.call(gpp_command(grammar_module_name))
 
+def extract_module(text: str):
+    start = text.find('@pymod') # should look like maybe "//@pymod  \t foo_parser   "
+    if start < 0:
+        return "lemon_derived_parser" # that oughta lern 'em not to put a @pymod
+    
+    end = text.find("\n", start)
 
-def build_grammar(grammar_file_path: str, grammar_module_name: str, use_temp = True):
+    linesplit = text[start:end].split()
+    if len(linesplit) < 2:
+        return "lemon_derived_parser"
+    return linesplit[1].strip()
+
+def build_grammar(grammar_file_path: str, grammar_module_name: str = None, use_temp = True):
     grammar_file_path = os.path.abspath(grammar_file_path)
     print("Compiling: " + grammar_file_path)
     
     old_dir = os.path.abspath(os.curdir)
     
     grammar_text = read_grammar_source(grammar_file_path)
+    if not grammar_module_name:
+        grammar_module_name = extract_module(grammar_text)
 
     with tempfile.TemporaryDirectory() as workdir:
         if use_temp:
@@ -81,5 +94,10 @@ def build_grammar(grammar_file_path: str, grammar_module_name: str, use_temp = T
     pass
 
 if __name__ == '__main__':
+    import argparse
+    ap = argparse.ArgumentParser(description="Build a grammar and optionally install it to the python path.")
+    ap.add_argument('--output', '-o', default='./', metavar='OUT', type=str, help="Output filename.")
+    ap.add_argument('grammar_file', type=str, help="The grammar file to build.")
+
     import sys
-    build_grammar(sys.argv[1], 'lemon_parser', False)
+    build_grammar(sys.argv[1], None, False)

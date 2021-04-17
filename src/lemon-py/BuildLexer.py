@@ -17,10 +17,10 @@ LEXER_END = \
 '''
 
 def extract_lexer_def(lemon_source: str) -> List[Tuple[str, str]]:
-    start = lemon_source.find('/*LEXDEF')
+    start = lemon_source.find('@lexdef')
     if start < 0:
-        raise RuntimeError("No lexer definitions found.")
-    end = lemon_source.find('*/', start)
+        raise RuntimeError("No lexer definition found.")
+    end = lemon_source.find('@endlex', start)
     lines = list(map(lambda s: tuple(s.strip().split(':')), lemon_source[start:end].splitlines()[1:]))
     lines = list(filter(lambda t: len(t) == 2, lines))
     lines = list(map(lambda t: (t[0].strip(), t[1].strip()), lines))
@@ -36,11 +36,11 @@ def implement_regex(token, regex):
     return f"_parser_impl::Lexer::add_value_type({token}, \"{regex}\");\n" + map_token_name(token)
 
 def map_token_name(token):
-    return f"      token_name_map.emplace({token}, \"{token}\");\n"
+    return f"      token_name_map.emplace({token}, \"{token}\");\n\n"
 
 def implement_lexer(lexer_def: List[Tuple[str, str]]) -> str:
     retval = LEXER_START[:]
-    retval += '      token_name_map.emplace(0, "EOF");\n'
+    retval += '      token_name_map.emplace(0, "EOF");\n\n'
     for tok, pattern in lexer_def:
         if tok.startswith('!'):
             retval += "      " + implement_skip(pattern)

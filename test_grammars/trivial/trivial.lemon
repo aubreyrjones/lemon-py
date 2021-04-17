@@ -1,13 +1,19 @@
-/*LEXDEF
+/*
+@pymod     trivial_parser
+
+@lexdef
+
 INT_LIT : [0-9]+
 COMMA := ,
 
 !whitespace : \\s
+
+@endlex
 */
 
-toplevel ::= int_list(IL). {p->push_root(IL); std::cout << "toplevel" << std::endl; }
+toplevel ::= int_list(IL). {p->push_root(IL);}
 
-int_list(I) ::= . { I = pnn("int_list"); std::cout << "int_list()" << std::endl; }
-int_list(G) ::= int_list(IL) COMMA integer(I). { IL->push_back(I); G = IL; std::cout << "int_list(,int)" << std::endl; }
+int_list(x_LIST) ::= . { x_LIST = pnn("int_list");}
+int_list(x_LIST) ::= int_list(x_RLIST) COMMA integer(I). { x_RLIST->push_back(I); x_LIST = x_RLIST;}
 
-integer(I) ::= INT_LIT(IL). {I = pnn(IL); std::cout << "integer" << std::endl; }
+integer(I) ::= INT_LIT(IL). {I = pnn(IL);}

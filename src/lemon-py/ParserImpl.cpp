@@ -12,6 +12,7 @@
 #include <iostream>
 #include <regex>
 #include <tuple>
+#include <sstream>
 #include "concat_grammar.h"
 #include <cstdio>
 
@@ -72,6 +73,7 @@ struct Token {
     int type;
     size_t valueIndex;
     StringTable *valueTable;
+    int line;
 
     std::string value() const { 
         if (valueTable) return valueTable->getString(valueIndex); 
@@ -98,11 +100,11 @@ struct Token {
 };
 
 Token make_token(int type) {
-    return Token {type, 0, nullptr};
+    return Token {type, 0, nullptr, -1};
 }
 
 Token make_token(int type, StringTable & st, std::string const& s) {
-    return Token { type, st.pushString(s), &st };
+    return Token { type, st.pushString(s), &st , -1};
 }
 
 template <typename V_T>
@@ -156,10 +158,28 @@ struct PTNode {
     }
 };
 
+/**
+ * This is a relatively basic lexer. It handles two classes of tokens plus skip patterns.
+ * 
+ * "literal" tokens are defined by a fixed string of characters, and are stored in a basic
+ * prefix tree (PTNode above). These are matched greedily, with the longest matching sequence
+ * having priority. Literal tokens are returned by lemon-defined code number, without a value.
+ * 
+ * "value" tokens are defined by a regular expression, and are returned with both a code
+ * and a value. A single sub-match may be used to denote a partial value extraction from
+ * the overall token match. No type conversions are done, all values are strings.
+ * 
+ * Value token patterns are checked in the same order they are defined with `add_value_type`.
+ * 
+ * Skip patterns are simply regexes that are used to skip whitespace, comments, or other
+ * lexically and syntactically-irrelevant content. Skip patterns are applied before every
+ * attempt at token extraction.
+ * 
+*/
 struct Lexer {
     static PTNode<int> literals;
-    static void add_literal(int tok_value, std::string const& code) {
-        literals.add_value(code, tok_value);
+    static void add_literal(int tok_code, std::string const& code) {
+        literals.add_value(code, tok_code);
     }
 
     static std::vector<std::regex> skips;
@@ -168,10 +188,11 @@ struct Lexer {
     }
 
     static std::vector<std::tuple<std::regex, int>> valueTypes;
-    static void add_value_type(int tok_value, std::string const& r) {
-        valueTypes.push_back(std::make_tuple(std::regex(r, std::regex::icase | std::regex::ECMAScript), tok_value));
+    static void add_value_type(int tok_code, std::string const& r) {
+        valueTypes.push_back(std::make_tuple(std::regex(r, std::regex::icase | std::regex::ECMAScript), tok_code));
     }
 
+    using siter = std::string::const_iterator;
     // == instance ==
 private:
     std::string input;
@@ -179,17 +200,28 @@ private:
     StringTable &stringTable;
     int count;
     bool reachedEnd;
+    int line = 0;
 
     void advanceBy(size_t count) {
-        while(count-- && curPos != input.cend()) { ++curPos; }
+        auto oldPos = curPos;
+        std::advance(curPos, count);
+        line += countLines(oldPos, curPos);
     }
 
-    void advanceBy(std::string_view const& sv) {
-        auto count = sv.length();
-        while (count && curPos != input.end()) {
-            ++curPos;
-            count--;
+    void advanceTo(siter const& newPos) {
+        auto oldPos = curPos;
+        curPos = newPos;
+        line += countLines(oldPos, curPos);
+    }
+
+    int countLines(siter from, siter const& to) {
+        int lineCount = 0;
+        for (; from != to; from++) {
+            if (*from == '\n') {
+                lineCount++;
+            }
         }
+        return lineCount;
     }
 
     void skip() {
@@ -210,7 +242,7 @@ private:
         auto result = literals.tryValue(curPos, input.cend());
         if (!result) return std::nullopt;
 
-        curPos = std::get<1>(result.value()); // don't need to advance
+        advanceTo(std::get<1>(result.value()));
         return make_token(std::get<0>(result.value()));
     }
 
@@ -223,11 +255,7 @@ private:
                     std::advance(match_iterator, 1);
                 }
 
-                std::string value = (*match_iterator).str();;
-
-                // for (; match_iterator != results.end(); std::advance(match_iterator, 1)) {
-                //     value = 
-                // }
+                std::string value = (*match_iterator).str();
 
                 advanceBy(results.length()); // advance by length of _entire_ match
                 return make_token(std::get<1>(r), stringTable, value);
@@ -254,10 +282,12 @@ public:
         
         if (auto lit = nextLiteral()) {
             count++;
+            lit.value().line = line;
             return lit;
         }
         else if (auto value = nextValue()) {
             count++;
+            value.value().line = line;
             return value;
         }
 
@@ -377,9 +407,12 @@ struct ParseNode {
     std::optional<std::string> value;
     int64_t line;
     std::vector<ParseNode> children;
+    int id;
 
-    ParseNode() : production(), tokName(), value(), line(-1), children() {}
-    ParseNode(ParseNode && o) : production(std::move(o.production)), tokName(std::move(o.tokName)), value(std::move(o.value)), line(o.line), children(std::move(o.children)) {}
+    ParseNode() : production(), tokName(), value(), line(-1), children(), id(-1) {}
+    ParseNode(ParseNode && o) : production(std::move(o.production)), tokName(std::move(o.tokName)), value(std::move(o.value)), line(o.line), children(std::move(o.children)), id(o.id) {
+        o.id = -1;
+    }
 
     ParseNode& operator=(ParseNode && o) {
         using namespace std;
@@ -388,6 +421,7 @@ struct ParseNode {
         value = move(o.value);
         line = o.line;
         children = move(o.children);
+        id = o.id;
 
         return *this;
     }
@@ -419,10 +453,45 @@ struct ParseNode {
 
         return std::string(outbuf);
     }
+
+    void dotify(std::stringstream & out, const ParseNode * parent) const {
+        char buf[1024];
+
+        if (production) {
+            snprintf(buf, 1024, "node [shape=record, label=\"<f0> %s | <f1> %ld\"] %d;\n", production.value().c_str(), line, id);
+        }
+        else {
+            snprintf(buf, 1024, "node [shape=record, label=\"<f0> %s | <f1> %s | <f2> %ld \"] %d;\n", tokName.value().c_str(), value.value().c_str(), line, id);
+        }
+        out << buf;
+
+        if (parent) {
+            snprintf(buf, 1024, "%d -> %d;\n", parent->id, id);
+            out << buf;
+        }
+
+        for (auto const& c : children) {
+            c.dotify(out, this);
+        }
+    }
 };
 
-ParseNode uplift_node(_parser_impl::ParseNode* alien) {
+std::string dotify(ParseNode const& pn) {
+    std::stringstream out;
+
+    out << "digraph \"AST\" { \n";
+	out << "node [shape=record, style=filled];\n\n";
+
+    pn.dotify(out, nullptr);
+
+    out << "\n}\n";
+
+    return out.str();
+}
+
+ParseNode uplift_node(_parser_impl::ParseNode* alien, int & idCounter) {
     ParseNode retval;
+    retval.id = idCounter++;
 
     if (std::holds_alternative<_parser_impl::Token>(alien->value)) {
         auto tok = std::get<_parser_impl::Token>(alien->value);
@@ -437,10 +506,15 @@ ParseNode uplift_node(_parser_impl::ParseNode* alien) {
     retval.line = alien->line;
     
     for (auto c : alien->children) {
-        retval.children.push_back(uplift_node(c));
+        retval.children.push_back(uplift_node(c, idCounter));
     }
 
     return std::move(retval);
+}
+
+ParseNode uplift_node(_parser_impl::ParseNode* alien) {
+    int idCounter = 0;
+    return uplift_node(alien, idCounter);
 }
 
 ParseNode parse_string(std::string const& input) {
@@ -468,6 +542,7 @@ ParseNode parse_string(std::string const& input) {
 
 PYBIND11_MODULE(PYTHON_PARSER_MODULE_NAME, m) {
     m.def("parse", &parser::parse_string, "Parse a string into a parse tree.");
+    m.def("dotify", &parser::dotify, "Get a graphviz DOT representation of the parse tree.");
 
     py::class_<parser::ParseNode>(m, "Node")
     .def(py::init<>())

@@ -1,0 +1,18 @@
+/*
+@pymod expr_parse
+
+@lexdef
+!whitespace : \\s
+
+' := CHAR
+" := STRING
+
+
+FLOAT_LIT : [0-9]+\\.[0-9]
+INT_LIT : [0-9]+
+
+COMMA := ,
+
+@endlex
+
+*/
