@@ -1,5 +1,1 @@
-5 * 
-3.2 
-+ 
-"a \"s'tring" * 3 
-+ 'some "chars'
+5 * 3.2 + "a string" * (3 + 'some chars') / a_variable + function_call (a + x, b / y + x, single_fn_call(void_fn_call()) * (z + 1))
