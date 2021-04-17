@@ -4,6 +4,8 @@ import os.path
 import os
 import pybind11
 
+import BuildLexer
+
 def data_file(*filename: str):
     return os.path.join(os.path.abspath(os.path.dirname(__file__)), *filename)
 
@@ -32,17 +34,19 @@ def gpp_command(module_name: str):
 
     return retval
 
+def read_grammar_source(grammar_file_path: str):
+    with open(os.path.abspath(grammar_file_path), 'r') as f:
+        grammar_text = f.read()
+    return grammar_text
 
-def concatenate_input(grammar_file_path: str):
+
+def concatenate_input(grammar_text: str):
     with open(GRAMMAR_HEADER_FILE, 'r') as f:
         header_text = f.read()
     
     with open(PARSER_IMPL_FILE, 'r') as f:
         impl_text = f.read()
 
-    with open(os.path.abspath(grammar_file_path), 'r') as f:
-        grammar_text = f.read()
-    
     whole_text = header_text + "\n" + f"%include {{\n{impl_text}\n}}\n" + grammar_text
 
     return whole_text
@@ -56,8 +60,6 @@ def write_and_build_curdir(whole_text: str, grammar_module_name: str):
     
     subprocess.call(gpp_command(grammar_module_name))
 
-    print(gpp_command(grammar_module_name))
-
 
 def build_grammar(grammar_file_path: str, grammar_module_name: str, use_temp = True):
     grammar_file_path = os.path.abspath(grammar_file_path)
@@ -65,10 +67,14 @@ def build_grammar(grammar_file_path: str, grammar_module_name: str, use_temp = T
     
     old_dir = os.path.abspath(os.curdir)
     
+    grammar_text = read_grammar_source(grammar_file_path)
+    lexer_def = BuildLexer.make_lexer(grammar_text)
+    print(lexer_def)
+
     with tempfile.TemporaryDirectory() as workdir:
         if use_temp:
             os.chdir(workdir)
-        write_and_build_curdir(concatenate_input(grammar_file_path), grammar_module_name)
+        write_and_build_curdir(concatenate_input(grammar_text), grammar_module_name)
         os.chdir(old_dir)    
     
     pass

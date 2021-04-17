@@ -4,3 +4,4 @@ src/crust/parse_tree.py
 lemon/lemon
 src/lemon-py/lem*
 src/lemon-py/elsewhere
+*__pycache__*

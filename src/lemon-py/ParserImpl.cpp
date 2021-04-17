@@ -10,8 +10,6 @@
 #include <unordered_map>
 #include <iostream>
 
-namespace py = pybind11;
-
 namespace _parser_impl {
     struct Token;
     struct Parser;
@@ -20,6 +18,9 @@ namespace _parser_impl {
 void* PRSLParseAlloc(void *(*mallocProc)(size_t));
 void PRSLParseFree(void *p, void (*freeProc)(void*));
 void PRSLParse(void *yyp, int yymajor, _parser_impl::Token yyminor, _parser_impl::Parser *);
+
+
+namespace py = pybind11;
 
 namespace _parser_impl {
 
@@ -33,9 +34,24 @@ protected:
 	PrevMap previousLocations;
 
 public:
-	size_t pushString(std::string const& s);  // add a string to the table
+	size_t pushString(std::string const& s) {
+        PrevMap::iterator it = previousLocations.find(s);
+        if (it != previousLocations.end()){
+            return (*it).second;
+        }
 
-	std::string const& getString(size_t index); // get a string
+        size_t idx = strings.size();
+        previousLocations.emplace(s, idx);
+
+        strings.push_back(s);
+
+        return idx;
+    }
+        
+
+	std::string const& getString(size_t index)  {
+    	return strings[index];
+    }
 };
 
 
@@ -57,7 +73,6 @@ struct Token {
 /** Either a production name or a token value. */
 using ParseValue = std::variant<std::string, Token>;
 
-
 /**
  * ParseNodes are handled by pointer within the parser.
 */
@@ -77,52 +92,28 @@ struct Parser {
 
     std::vector<std::unique_ptr<ParseNode>> allNodes;
 
-    ParseNode* make_node(ParseValue const& value, ChildrenPack const& children, int64_t line = -1);
+    ParseNode* make_node(ParseValue const& value, ChildrenPack const& children, int64_t line = -1) {
+        auto node = std::make_unique<ParseNode>();
+        node->value = value;
+        node->line = line;
+        node->children.insert(node->children.end(), children);
 
-    void error();
-	void success();
+        auto retval = node.get();
+        allNodes.push_back(std::move(node));
+
+        return retval;
+    }
+
+    void error() {
+        std::cout << "Error." << std::endl;
+        exit(25);
+    }
+
+	void success() {
+        std::cout << "Parse successful." << std::endl;
+    }
 };
 
-size_t StringTable::pushString(std::string const &s) {
-	PrevMap::iterator it = previousLocations.find(s);
-	if (it != previousLocations.end()){
-		return (*it).second;
-	}
-
-	size_t idx = strings.size();
-	previousLocations.emplace(s, idx);
-
-	strings.push_back(s);
-
-	return idx;
-}
-
-std::string const &StringTable::getString(size_t index) {
-	return strings[index];
-}
-
-
- ParseNode* Parser::make_node(ParseValue const& value, ChildrenPack const& children, int64_t line) {
-    auto node = std::make_unique<ParseNode>();
-    node->value = value;
-    node->line = line;
-    node->children.insert(node->children.end(), children);
-
-    auto retval = node.get();
-    allNodes.push_back(std::move(node));
-
-    return retval;
-}
-
-
-void Parser::error() {
-    std::cout << "Error." << std::endl;
-    exit(25);
-}
-
-void Parser::success() {
-    std::cout << "Parse successful." << std::endl;
-}
 
 } // namespace
 
@@ -168,6 +159,6 @@ PYBIND11_MODULE(PYTHON_PARSER_MODULE_NAME, m) {
     .def(py::init<>())
     .def("production", &parser::ParseNode::getProduction, "Get production if non-terminal.")
     .def("value", &parser::ParseNode::getValue, "Get value if terminal.")
-    .def_readonly("line", &parser::ParseNode::line, "Line number of definition.")
+    .def_readonly("line", &parser::ParseNode::line, "Line number of appearance.")
     .def_readonly("c", &parser::ParseNode::children, "Children.");
 }

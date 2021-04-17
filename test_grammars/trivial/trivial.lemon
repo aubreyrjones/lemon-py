@@ -1,6 +1,15 @@
+/*LEXDEF
+INT_LIT : [0-9]+
+COMMA := ,
+COMMA_BANG := ,!
+!comment : ;.*$
+!whitespace : \s
+*/
+
 toplevel ::= int_list.
 
 int_list ::= integer.
-int_list ::= int_list integer.
+int_list ::= int_list COMMA integer.
+int_list ::= int_list COMMA_BANG integer.
 
 integer ::= INT_LIT.
