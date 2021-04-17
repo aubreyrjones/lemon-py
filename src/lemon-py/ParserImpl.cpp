@@ -13,6 +13,7 @@
 #include <regex>
 #include <tuple>
 #include "concat_grammar.h"
+#include <cstdio>
 
 namespace _parser_impl {
     struct Token;
@@ -59,6 +60,7 @@ public:
     }
 };
 
+std::unordered_map<int, std::string> token_name_map;
 
 /**
  * It seems Token must be a trivial value type to pass through
@@ -71,7 +73,28 @@ struct Token {
     size_t valueIndex;
     StringTable *valueTable;
 
-    std::string const& value() const { return valueTable->getString(valueIndex); }
+    std::string value() const { 
+        if (valueTable) return valueTable->getString(valueIndex); 
+        return "LITERAL";
+    }
+
+    std::string const& name() const {
+        return token_name_map[type];
+    }
+
+    std::string toString() const {
+        auto const& tokenName = token_name_map[type];
+
+        char outbuf[1024]; // just do the first 1k characters
+        if (valueTable) {
+            snprintf(outbuf, 1024, "Token: %s <%s>", tokenName.c_str(), value().c_str());
+        }
+        else {
+            snprintf(outbuf, 1024, "Token: %s", tokenName.c_str());
+        }
+
+        return std::string(outbuf);
+    }
 };
 
 Token make_token(int type) {
@@ -111,7 +134,7 @@ struct PTNode {
     using LexResult = std::tuple<V_T, std::string::const_iterator>;
 
     std::optional<LexResult> tryValue(std::string::const_iterator first, std::string::const_iterator last) const {
-        std::cout << "Checking " << std::string(first, last) << " against " << code << std::endl;
+        //std::cout << "Checking " << std::string(first, last) << " against " << code << std::endl;
         if (children.empty() || first == last) { // reached end of input or end of chain while still matching.
             goto bailout;
         }
@@ -150,15 +173,15 @@ struct Lexer {
     }
 
     // == instance ==
-
+private:
     std::string input;
     std::string::const_iterator curPos;
     StringTable &stringTable;
-
-    Lexer(std::string const& inputString, StringTable & stringTable) : input(inputString), curPos(input.cbegin()), stringTable(stringTable) {}
+    int count;
+    bool reachedEnd;
 
     void advanceBy(size_t count) {
-        while(count--) { ++curPos; }
+        while(count-- && curPos != input.cend()) { ++curPos; }
     }
 
     void advanceBy(std::string_view const& sv) {
@@ -176,7 +199,6 @@ struct Lexer {
             for (auto const& r : skips) {
                 std::smatch results;
                 if (std::regex_search(curPos, input.cend(), results, r, std::regex_constants::match_continuous)) {
-                    std::cout << "skipped " << results.length() << std::endl;
                     skipped = true;
                     advanceBy(results.length());
                 }
@@ -187,8 +209,6 @@ struct Lexer {
     std::optional<Token> nextLiteral() {
         auto result = literals.tryValue(curPos, input.cend());
         if (!result) return std::nullopt;
-
-        std::cout << std::string(std::get<1>(result.value()), input.cend()) << std::endl;
 
         curPos = std::get<1>(result.value()); // don't need to advance
         return make_token(std::get<0>(result.value()));
@@ -209,25 +229,52 @@ struct Lexer {
                 //     value = 
                 // }
 
-                advanceBy(results.length());
+                advanceBy(results.length()); // advance by length of _entire_ match
                 return make_token(std::get<1>(r), stringTable, value);
             }
         }
         return std::nullopt;
     }
 
+public:
+    Lexer(std::string const& inputString, StringTable & stringTable) : input(inputString), curPos(input.cbegin()), stringTable(stringTable), count(0), reachedEnd(false) {}
+
     std::optional<Token> next() {
         skip();
+
+        if (consumedInput()) {
+            if (reachedEnd) {
+                return std::nullopt;
+            }
+            else {
+                reachedEnd = true;
+                return make_token(0);
+            }
+        }
         
         if (auto lit = nextLiteral()) {
+            count++;
             return lit;
         }
         else if (auto value = nextValue()) {
+            count++;
             return value;
         }
 
         return std::nullopt;
     };
+
+    bool consumedInput() {
+        return curPos == input.cend();
+    }
+
+    std::string remainder() {
+        return std::string(curPos, input.cend());
+    }
+
+    int getCount() const {
+        return count;
+    }
 };
 
 void _init_lexer();
@@ -292,16 +339,15 @@ struct Parser {
 
     void offerToken(Token token) {
         currentToken = token;
-        std::cout << token.type << std::endl;
 	    LemonPyParse(lemonParser, token.type, token, this);
     }
 
     void error() {
-        throw std::runtime_error("Parse error on token: ");
+        throw std::runtime_error("Parse error on token: " + currentToken.value());
     }
 
 	void success() {
-        std::cout << "Parse successful." << std::endl;
+        //nop
     }
 
     ParseNode* push_root(ParseNode *pn) {
@@ -327,9 +373,28 @@ py::object string_or_none(std::optional<std::string> const& v) {
 
 struct ParseNode {
     std::optional<std::string> production;
+    std::optional<std::string> tokName;
     std::optional<std::string> value;
     int64_t line;
     std::vector<ParseNode> children;
+
+    ParseNode() : production(), tokName(), value(), line(-1), children() {}
+    ParseNode(ParseNode && o) : production(std::move(o.production)), tokName(std::move(o.tokName)), value(std::move(o.value)), line(o.line), children(std::move(o.children)) {}
+
+    ParseNode& operator=(ParseNode && o) {
+        using namespace std;
+        production = move(o.production);
+        tokName = move(o.tokName);
+        value = move(o.value);
+        line = o.line;
+        children = move(o.children);
+
+        return *this;
+    }
+
+
+    ParseNode(ParseNode const&) = default;
+    ParseNode& operator=(ParseNode const&) = default;
 
     py::object getProduction() const {
         return string_or_none(production);
@@ -338,7 +403,45 @@ struct ParseNode {
     py::object getValue() const {
         return string_or_none(value);
     }
+
+    py::object getToken() const {
+        return string_or_none(tokName);
+    }
+
+    std::string toString() {
+        char outbuf[1024]; // just do the first 1k characters
+        if (production) {
+            snprintf(outbuf, 1024, "{%s} [%lu]", production.value().c_str(), children.size());
+        }
+        else {
+            snprintf(outbuf, 1024, "%s <%s>", tokName.value().c_str(), value.value().c_str());
+        }
+
+        return std::string(outbuf);
+    }
 };
+
+ParseNode uplift_node(_parser_impl::ParseNode* alien) {
+    ParseNode retval;
+
+    if (std::holds_alternative<_parser_impl::Token>(alien->value)) {
+        auto tok = std::get<_parser_impl::Token>(alien->value);
+        retval.tokName = tok.name();
+        retval.value = tok.value();
+        //std::cout << "uplifting " << retval.value.value() << std::endl;
+    }
+    else {
+        retval.production = std::get<std::string>(alien->value);
+        //std::cout << "uplifting " << retval.production.value() << std::endl;
+    }
+    retval.line = alien->line;
+    
+    for (auto c : alien->children) {
+        retval.children.push_back(uplift_node(c));
+    }
+
+    return std::move(retval);
+}
 
 ParseNode parse_string(std::string const& input) {
     using namespace _parser_impl;
@@ -349,12 +452,12 @@ ParseNode parse_string(std::string const& input) {
          p.offerToken(tok.value());
     }
 
-    if (lexer.curPos != lexer.input.end()) {
-        throw std::runtime_error(std::string("Input not consumed. Remaining: ") + std::string(lexer.curPos, lexer.input.cend()));
+    if (!lexer.consumedInput()) {
+        throw std::runtime_error(std::string("Input not consumed. Remaining: ") + lexer.remainder());
     }
 
     if (p.root) { // successful parse.
-        std::cout << "parsed " << input << std::endl;
+        return uplift_node(p.root);
     }
 
     return ParseNode();
@@ -368,8 +471,10 @@ PYBIND11_MODULE(PYTHON_PARSER_MODULE_NAME, m) {
 
     py::class_<parser::ParseNode>(m, "Node")
     .def(py::init<>())
-    .def("production", &parser::ParseNode::getProduction, "Get production if non-terminal.")
-    .def("value", &parser::ParseNode::getValue, "Get value if terminal.")
+    .def("__repr__", &parser::ParseNode::toString, "Get an approximation of the representation.")
+    .def_property_readonly("production", &parser::ParseNode::getProduction, "Get production if non-terminal.")
+    .def_property_readonly("type", &parser::ParseNode::getToken, "Get type if terminal.")
+    .def_property_readonly("value", &parser::ParseNode::getValue, "Get value if terminal.")
     .def_readonly("line", &parser::ParseNode::line, "Line number of appearance.")
     .def_readonly("c", &parser::ParseNode::children, "Children.");
 }

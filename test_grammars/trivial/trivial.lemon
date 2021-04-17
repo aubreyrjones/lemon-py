@@ -1,14 +1,12 @@
 /*LEXDEF
-INT_LIT := x
+INT_LIT : [0-9]+
 COMMA := ,
-COMMA_COMMA := ,,
 !whitespace : \\s
 */
 
-toplevel ::= int_list(IL). { p->push_root(IL); }
+toplevel ::= int_list(IL). {p->push_root(IL); std::cout << "toplevel" << std::endl; }
 
-int_list(I) ::= . { I = pnn("int_list"); }
-int_list(G) ::= int_list(IL) COMMA integer(I). { IL->push_back(I); G = IL; }
-int_list(G) ::= int_list(IL) COMMA_COMMA integer(I). { IL->push_back(I); G = IL; }
+int_list(I) ::= . { I = pnn("int_list"); std::cout << "int_list()" << std::endl; }
+int_list(G) ::= int_list(IL) COMMA integer(I). { IL->push_back(I); G = IL; std::cout << "int_list(,int)" << std::endl; }
 
-integer(I) ::= INT_LIT(IL). {I = pnn(IL);}
+integer(I) ::= INT_LIT(IL). {I = pnn(IL); std::cout << "integer" << std::endl; }
