@@ -24,6 +24,7 @@ def gpp_command(module_name: str):
     retval.extend(pyinclude.split())
     retval.extend(pylink.split())
     retval.extend([
+#        "-Wl,-z,defs",
         f"-DPYTHON_PARSER_MODULE_NAME={module_name}",
         f"-I{pybind11.get_include()}",
         "concat_grammar.c",

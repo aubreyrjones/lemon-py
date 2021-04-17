@@ -2,7 +2,7 @@ from typing import *
 
 LEXER_START = \
 '''
-namespace parser {
+namespace _parser_impl {
 void _init_lexer() {
     static bool isInit = false;
     if (isInit) return;

@@ -19,9 +19,9 @@ namespace _parser_impl {
     struct Parser;
 }
 
-void* PRSLParseAlloc(void *(*mallocProc)(size_t));
-void PRSLParseFree(void *p, void (*freeProc)(void*));
-void PRSLParse(void *yyp, int yymajor, _parser_impl::Token yyminor, _parser_impl::Parser *);
+void* LemonPyParseAlloc(void *(*mallocProc)(size_t));
+void LemonPyParseFree(void *p, void (*freeProc)(void*));
+void LemonPyParse(void *yyp, int yymajor, _parser_impl::Token yyminor, _parser_impl::Parser *);
 
 
 namespace py = pybind11;
@@ -111,16 +111,29 @@ struct PTNode {
     using LexResult = std::tuple<V_T, std::string::const_iterator>;
 
     std::optional<LexResult> tryValue(std::string::const_iterator first, std::string::const_iterator last) const {
-        if (first + 1 != last) {
-            for (auto const& c : children) {
-                if (*first == c.code) {
-                    return c.tryValue(first + 1, last);
+        std::cout << "Checking " << std::string(first, last) << " against " << code << std::endl;
+        if (children.empty() || first == last) { // reached end of input or end of chain while still matching.
+            if (value) {
+                std::cout << "matched 1" << code << std::endl;
+                return std::make_tuple(value.value(), first);
+            }
+            else {
+                return std::nullopt;
+            }
+        }
+
+        for (auto const& c : children) {
+            std::cout << "\t checking " << *first << " v " << c.code << std::endl;
+            if (*first == c.code) {
+                if (auto found = c.tryValue(first + 1, last)) {
+                    return found;
                 }
             }
         }
 
-        if (value && *first == code) {
-            return std::make_tuple(value.value(), first + 1);
+        if (*first == code && value) {
+                std::cout << "matched 2" << code << std::endl;
+                std::make_tuple(value.value(), first + 1);
         }
 
         return std::nullopt;
@@ -181,8 +194,10 @@ struct Lexer {
         auto result = literals.tryValue(curPos, input.cend());
         if (!result) return std::nullopt;
 
+        std::cout << std::string(std::get<1>(result.value()), input.cend()) << std::endl;
+
         curPos = std::get<1>(result.value()); // don't need to advance
-        return /*make token*/ std::nullopt;
+        return make_token(std::get<0>(result.value()));
     }
 
     std::optional<Token> nextValue() {
@@ -251,11 +266,14 @@ struct Parser {
     StringTable stringTable;
     Token currentToken;
 
-    Parser() : lemonParser(PRSLParseAlloc(malloc)), allNodes(), stringTable() {}
+    ParseNode *root = nullptr;
+
+    Parser() : lemonParser(LemonPyParseAlloc(malloc)), allNodes(), stringTable() {
+        _init_lexer();
+    }
 
     ~Parser() {
-        _init_lexer();
-        PRSLParseFree(lemonParser, free);
+        LemonPyParseFree(lemonParser, free);
     }
 
     using ChildrenPack = std::initializer_list<ParseNode*>;
@@ -280,16 +298,20 @@ struct Parser {
 
     void offerToken(Token token) {
         currentToken = token;
-	    PRSLParse(lemonParser, token.type, token, this);
+        std::cout << token.type << std::endl;
+	    LemonPyParse(lemonParser, token.type, token, this);
     }
 
     void error() {
-        std::cout << "Error." << std::endl;
-        exit(25);
+        throw std::runtime_error("Parse error on token: ");
     }
 
 	void success() {
         std::cout << "Parse successful." << std::endl;
+    }
+
+    ParseNode* push_root(ParseNode *pn) {
+        return root = pn;
     }
 };
 
@@ -325,13 +347,22 @@ struct ParseNode {
 };
 
 ParseNode parse_string(std::string const& input) {
-    // using namespace _parser_impl;
-    // Parser p;
-    // Lexer lexer(input, p.stringTable);
+    using namespace _parser_impl;
+    Parser p;
+    Lexer lexer(input, p.stringTable);
 
-    // while (auto tok = lexer.next()) {
-    //     p.offerToken(tok.value());
-    // }
+    while (auto tok = lexer.next()) {
+         p.offerToken(tok.value());
+    }
+
+    if (lexer.curPos != lexer.input.end()) {
+        throw std::runtime_error(std::string("Input not consumed. Remaining: ") + std::string(lexer.curPos, lexer.input.cend()));
+    }
+
+    if (p.root) { // successful parse.
+        std::cout << "parsed " << input << std::endl;
+    }
+
     return ParseNode();
 }
 
