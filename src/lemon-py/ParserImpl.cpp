@@ -113,17 +113,10 @@ struct PTNode {
     std::optional<LexResult> tryValue(std::string::const_iterator first, std::string::const_iterator last) const {
         std::cout << "Checking " << std::string(first, last) << " against " << code << std::endl;
         if (children.empty() || first == last) { // reached end of input or end of chain while still matching.
-            if (value) {
-                std::cout << "matched 1" << code << std::endl;
-                return std::make_tuple(value.value(), first);
-            }
-            else {
-                return std::nullopt;
-            }
+            goto bailout;
         }
 
         for (auto const& c : children) {
-            std::cout << "\t checking " << *first << " v " << c.code << std::endl;
             if (*first == c.code) {
                 if (auto found = c.tryValue(first + 1, last)) {
                     return found;
@@ -131,9 +124,9 @@ struct PTNode {
             }
         }
 
-        if (*first == code && value) {
-                std::cout << "matched 2" << code << std::endl;
-                std::make_tuple(value.value(), first + 1);
+        bailout:
+        if (value) { // 
+                return std::make_tuple(value.value(), first);
         }
 
         return std::nullopt;
@@ -148,12 +141,12 @@ struct Lexer {
 
     static std::vector<std::regex> skips;
     static void add_skip(std::string const& r) {
-        skips.push_back(std::regex(r, std::regex::icase | std::regex::extended));
+        skips.push_back(std::regex(r, std::regex::icase | std::regex::ECMAScript));
     }
 
     static std::vector<std::tuple<std::regex, int>> valueTypes;
     static void add_value_type(int tok_value, std::string const& r) {
-        valueTypes.push_back(std::make_tuple(std::regex(r, std::regex::icase | std::regex::extended), tok_value));
+        valueTypes.push_back(std::make_tuple(std::regex(r, std::regex::icase | std::regex::ECMAScript), tok_value));
     }
 
     // == instance ==
@@ -182,7 +175,8 @@ struct Lexer {
             skipped = false;
             for (auto const& r : skips) {
                 std::smatch results;
-                if (std::regex_search(curPos, input.cend(), results, r)) {
+                if (std::regex_search(curPos, input.cend(), results, r, std::regex_constants::match_continuous)) {
+                    std::cout << "skipped " << results.length() << std::endl;
                     skipped = true;
                     advanceBy(results.length());
                 }
@@ -203,7 +197,7 @@ struct Lexer {
     std::optional<Token> nextValue() {
         for (auto const& r : valueTypes) {
             std::smatch results;
-            if (std::regex_search(curPos, input.cend(), results, std::get<0>(r))) {
+            if (std::regex_search(curPos, input.cend(), results, std::get<0>(r), std::regex_constants::match_continuous)) {
                 auto match_iterator = results.begin();
                 if (results.size() > 1) { // skip past the whole match to get a submatch
                     std::advance(match_iterator, 1);

@@ -1,11 +1,14 @@
 /*LEXDEF
 INT_LIT := x
 COMMA := ,
+COMMA_COMMA := ,,
+!whitespace : \\s
 */
 
 toplevel ::= int_list(IL). { p->push_root(IL); }
 
 int_list(I) ::= . { I = pnn("int_list"); }
 int_list(G) ::= int_list(IL) COMMA integer(I). { IL->push_back(I); G = IL; }
+int_list(G) ::= int_list(IL) COMMA_COMMA integer(I). { IL->push_back(I); G = IL; }
 
 integer(I) ::= INT_LIT(IL). {I = pnn(IL);}
