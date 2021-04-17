@@ -1,3 +1,4 @@
+#line 2 "ParserImpl.cpp"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -9,6 +10,9 @@
 #include <optional>
 #include <unordered_map>
 #include <iostream>
+#include <regex>
+#include <tuple>
+#include "concat_grammar.h"
 
 namespace _parser_impl {
     struct Token;
@@ -69,6 +73,155 @@ struct Token {
     std::string const& value() const { return valueTable->getString(valueIndex); }
 };
 
+Token make_token(int type) {
+    return Token {type, 0, nullptr};
+}
+
+Token make_token(int type, StringTable & st, std::string const& s) {
+    return Token { type, st.pushString(s), &st };
+}
+
+template <typename V_T>
+struct PTNode {
+    char code;
+    std::optional<V_T> value;
+
+    std::vector<PTNode> children;
+
+    PTNode(char code, std::optional<V_T> const& value) : code(code), value(value), children() {}
+
+    void add_value(std::string_view const& code, V_T const& value) {
+        if (code.length() == 0) {
+            this->value = value;
+            return;
+        }
+
+        for (auto & c : children) {
+            if (c.code == code[0]) {
+                c.add_value(code.substr(1, code.length() - 1), value);
+                return;
+            }
+        }
+
+        children.emplace_back(code[0], std::nullopt);
+        children.back().add_value(code.substr(1, code.length() - 1), value);
+    }
+
+    using LexResult = std::tuple<V_T, std::string::const_iterator>;
+
+    std::optional<LexResult> tryValue(std::string::const_iterator first, std::string::const_iterator last) const {
+        if (first + 1 != last) {
+            for (auto const& c : children) {
+                if (*first == c.code) {
+                    return c.tryValue(first + 1, last);
+                }
+            }
+        }
+
+        if (value && *first == code) {
+            return std::make_tuple(value.value(), first + 1);
+        }
+
+        return std::nullopt;
+    }
+};
+
+struct Lexer {
+    static PTNode<int> literals;
+    static void add_literal(int tok_value, std::string const& code) {
+        literals.add_value(code, tok_value);
+    }
+
+    static std::vector<std::regex> skips;
+    static void add_skip(std::string const& r) {
+        skips.push_back(std::regex(r, std::regex::icase | std::regex::extended));
+    }
+
+    static std::vector<std::tuple<std::regex, int>> valueTypes;
+    static void add_value_type(int tok_value, std::string const& r) {
+        valueTypes.push_back(std::make_tuple(std::regex(r, std::regex::icase | std::regex::extended), tok_value));
+    }
+
+    // == instance ==
+
+    std::string input;
+    std::string::const_iterator curPos;
+    StringTable &stringTable;
+
+    Lexer(std::string const& inputString, StringTable & stringTable) : input(inputString), curPos(input.cbegin()), stringTable(stringTable) {}
+
+    void advanceBy(size_t count) {
+        while(count--) { ++curPos; }
+    }
+
+    void advanceBy(std::string_view const& sv) {
+        auto count = sv.length();
+        while (count && curPos != input.end()) {
+            ++curPos;
+            count--;
+        }
+    }
+
+    void skip() {
+        bool skipped = false;
+        do { 
+            skipped = false;
+            for (auto const& r : skips) {
+                std::smatch results;
+                if (std::regex_search(curPos, input.cend(), results, r)) {
+                    skipped = true;
+                    advanceBy(results.length());
+                }
+            }
+        } while (skipped);
+    }
+
+    std::optional<Token> nextLiteral() {
+        auto result = literals.tryValue(curPos, input.cend());
+        if (!result) return std::nullopt;
+
+        curPos = std::get<1>(result.value()); // don't need to advance
+        return /*make token*/ std::nullopt;
+    }
+
+    std::optional<Token> nextValue() {
+        for (auto const& r : valueTypes) {
+            std::smatch results;
+            if (std::regex_search(curPos, input.cend(), results, std::get<0>(r))) {
+                auto match_iterator = results.begin();
+                if (results.size() > 1) { // skip past the whole match to get a submatch
+                    std::advance(match_iterator, 1);
+                }
+
+                std::string value = (*match_iterator).str();;
+
+                // for (; match_iterator != results.end(); std::advance(match_iterator, 1)) {
+                //     value = 
+                // }
+
+                advanceBy(results.length());
+                return make_token(std::get<1>(r), stringTable, value);
+            }
+        }
+        return std::nullopt;
+    }
+
+    std::optional<Token> next() {
+        skip();
+        
+        if (auto lit = nextLiteral()) {
+            return lit;
+        }
+        else if (auto value = nextValue()) {
+            return value;
+        }
+
+        return std::nullopt;
+    };
+};
+
+// root of literals tree
+PTNode<int> Lexer::literals(0, std::nullopt);
 
 /** Either a production name or a token value. */
 using ParseValue = std::variant<std::string, Token>;
@@ -162,3 +315,6 @@ PYBIND11_MODULE(PYTHON_PARSER_MODULE_NAME, m) {
     .def_readonly("line", &parser::ParseNode::line, "Line number of appearance.")
     .def_readonly("c", &parser::ParseNode::children, "Children.");
 }
+
+
+

@@ -9,6 +9,8 @@ LEXER_END = \
 '''
     }
 } _lexer_definitions_init_instance;
+
+
 '''
 
 def extract_lexer_def(lemon_source: str) -> List[Tuple[str, str]]:
@@ -21,13 +23,13 @@ def extract_lexer_def(lemon_source: str) -> List[Tuple[str, str]]:
     return lines
 
 def implement_skip(regex: str):
-    return f"Lexer::add_skip(\"{regex}\");\n"
+    return f"_parser_impl::Lexer::add_skip(\"{regex}\");\n"
 
 def implement_literal(token, litval):
-    return f"Lexer::add_literal({token}, \"{litval}\");\n"
+    return f"_parser_impl::Lexer::add_literal({token}, \"{litval}\");\n"
 
 def implement_regex(token, regex):
-    return f"Lexer::add_value_type({token}, \"{regex}\");\n"
+    return f"_parser_impl::Lexer::add_value_type({token}, \"{regex}\");\n"
 
 def implement_lexer(lexer_def: List[Tuple[str, str]]) -> str:
     retval = LEXER_START[:]

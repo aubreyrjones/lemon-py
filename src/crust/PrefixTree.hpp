@@ -30,7 +30,9 @@ struct PTNode {
         children.back().add_value(code.substr(1, code.length() - 1), value);
     }
 
-    std::optional<V_T> const& tryValue(std::string::const_iterator first, std::string::const_iterator last) {
+    using LexResult = std::tuple<V_T, std::string::const_iterator>;
+
+    std::optional<LexResult> const& tryValue(std::string::const_iterator first, std::string::const_iterator last) {
         if (first + 1 != last) {
             for (auto const& c : children) {
                 if (*first == c.code) {
@@ -40,7 +42,7 @@ struct PTNode {
         }
 
         if (*first == code) {
-            return value;
+            return std::make_tuple(value, first + 1);
         }
 
         return std::nullopt;
@@ -99,7 +101,10 @@ struct Lexer {
 
     std::optional<Token> nextLiteral() {
         auto result = literals.tryValue(curPos, input.cend());
-        return std::nullopt;
+        if (!result) std::nullopt;
+
+        curPos = std::get<1>(result.value());
+        return /*make token*/ std::nullopt;
     }
 
     std::optional<Token> nextValue() {

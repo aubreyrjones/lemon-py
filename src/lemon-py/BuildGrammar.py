@@ -47,7 +47,9 @@ def concatenate_input(grammar_text: str):
     with open(PARSER_IMPL_FILE, 'r') as f:
         impl_text = f.read()
 
-    whole_text = header_text + "\n" + f"%include {{\n{impl_text}\n}}\n" + grammar_text
+    lexer_def = BuildLexer.make_lexer(grammar_text)
+
+    whole_text = header_text + "\n" + f"%include {{\n{impl_text + lexer_def}\n}}\n" + grammar_text
 
     return whole_text
 
@@ -68,8 +70,6 @@ def build_grammar(grammar_file_path: str, grammar_module_name: str, use_temp = T
     old_dir = os.path.abspath(os.curdir)
     
     grammar_text = read_grammar_source(grammar_file_path)
-    lexer_def = BuildLexer.make_lexer(grammar_text)
-    print(lexer_def)
 
     with tempfile.TemporaryDirectory() as workdir:
         if use_temp:

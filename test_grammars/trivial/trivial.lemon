@@ -3,7 +3,7 @@ INT_LIT : [0-9]+
 COMMA := ,
 COMMA_BANG := ,!
 !comment : ;.*$
-!whitespace : \s
+!whitespace : \\s
 */
 
 toplevel ::= int_list.
