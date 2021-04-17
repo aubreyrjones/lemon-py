@@ -89,22 +89,22 @@ struct Token {
 
         char outbuf[1024]; // just do the first 1k characters
         if (valueTable) {
-            snprintf(outbuf, 1024, "%s <%s>", tokenName.c_str(), value().c_str());
+            snprintf(outbuf, 1024, "%s <%s> (line %d)", tokenName.c_str(), value().c_str(), line);
         }
         else {
-            snprintf(outbuf, 1024, "%s", tokenName.c_str());
+            snprintf(outbuf, 1024, "%s (line %d)", tokenName.c_str(), line);
         }
 
         return std::string(outbuf);
     }
 };
 
-Token make_token(int type) {
-    return Token {type, 0, nullptr, -1};
+Token make_token(int type, int line) {
+    return Token {type, 0, nullptr, line};
 }
 
-Token make_token(int type, StringTable & st, std::string const& s) {
-    return Token { type, st.pushString(s), &st , -1};
+Token make_token(int type, StringTable & st, std::string const& s, int line) {
+    return Token {type, st.pushString(s), &st, line};
 }
 
 template <typename V_T>
@@ -159,7 +159,7 @@ struct PTNode {
 };
 
 /**
- * This is a relatively basic lexer. It handles two classes of tokens plus skip patterns.
+ * This is a relatively basic lexer. It handles two classes of tokens, plus skip patterns.
  * 
  * "literal" tokens are defined by a fixed string of characters, and are stored in a basic
  * prefix tree (PTNode above). These are matched greedily, with the longest matching sequence
@@ -260,7 +260,7 @@ private:
     std::optional<Token> nextString() {
         auto n = [this] (int tokCode, char delim) {
             if (*curPos == delim) {
-                return make_token(tokCode, stringTable, std::string(curPos, stringEnd(delim, curPos + 1, input.cend())));
+                return make_token(tokCode, stringTable, std::string(curPos, stringEnd(delim, curPos + 1, input.cend())), line);
             }
         };
 
@@ -278,7 +278,7 @@ private:
         if (!result) return std::nullopt;
 
         advanceTo(std::get<1>(result.value()));
-        return make_token(std::get<0>(result.value()));
+        return make_token(std::get<0>(result.value()), line);
     }
 
     std::optional<Token> nextValue() {
@@ -293,7 +293,7 @@ private:
                 std::string value = (*match_iterator).str();
 
                 advanceBy(results.length()); // advance by length of _entire_ match
-                return make_token(std::get<1>(r), stringTable, value);
+                return make_token(std::get<1>(r), stringTable, value, line);
             }
         }
         return std::nullopt;
@@ -311,18 +311,16 @@ public:
             }
             else {
                 reachedEnd = true;
-                return make_token(0);
+                return make_token(0, line);
             }
         }
         
         if (auto lit = nextLiteral()) {
             count++;
-            lit.value().line = line;
             return lit;
         }
         else if (auto value = nextValue()) {
             count++;
-            value.value().line = line;
             return value;
         }
 
@@ -363,6 +361,10 @@ struct ParseNode {
     std::vector<ParseNode*> children;
 
     ParseNode* push_back(ParseNode *n) { children.push_back(n); return this; }
+
+    ParseNode* pb(ParseNode *n) { return push_back(n); }
+
+    ParseNode* l(int64_t line) { this->line = line; return this; }
 };
 
 /**
@@ -388,7 +390,13 @@ struct Parser {
     ParseNode* make_node(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1) {
         auto node = std::make_unique<ParseNode>();
         node->value = value;
-        node->line = line;
+        if (std::holds_alternative<Token>(value)) {
+            node-> line = std::get<Token>(value).line;
+        }
+        else {
+            node->line = line;
+        }
+
         node->children.insert(node->children.end(), children);
 
         auto retval = node.get();
@@ -499,10 +507,10 @@ struct ParseNode {
         char buf[1024];
 
         if (production) {
-            snprintf(buf, 1024, "node [shape=record, label=\"<f0> %s | <f1> %ld\"] %d;\n", production.value().c_str(), line, id);
+            snprintf(buf, 1024, "node [shape=record, label=\"{<f0>line:%ld | <f1> %s }\"] %d;\n", line, production.value().c_str(), id);
         }
         else {
-            snprintf(buf, 1024, "node [shape=record, label=\"<f0> %s | <f1> %s | <f2> %ld \"] %d;\n", tokName.value().c_str(), value.value().c_str(), line, id);
+            snprintf(buf, 1024, "node [shape=record, label=\"{<f0>line:%ld | { <f1> %s | <f2> %s}}\"] %d;\n", line, tokName.value().c_str(), value.value().c_str(), id);
         }
         out << buf;
 

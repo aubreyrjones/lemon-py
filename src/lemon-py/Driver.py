@@ -1,5 +1,8 @@
 import importlib
 import argparse
+import tempfile
+import subprocess
+from os import path
 
 class Driver:
     def __init__(self, lang_name: str):
@@ -17,12 +20,21 @@ class Driver:
     def write_dot(self, parse_tree, outfile_path):
         with open(outfile_path, 'w') as f:
             f.write(self.dotify(parse_tree))
+    
+    def vis_dot(self, parse_tree):
+        with tempfile.TemporaryDirectory() as workdir:
+            outfile = path.join(workdir, "out.dot")
+            pngfile = f"{outfile}.png"
+            self.write_dot(parse_tree, outfile)
+            subprocess.call(["dot", "-Tpng", f"-o{pngfile}", outfile]) # dot -Tpng -O out.dot && display out.dot.png
+            subprocess.call(["display", pngfile])
 
 
 if __name__ == '__main__':
     import argparse
     import sys
     ap = argparse.ArgumentParser(description="Build a grammar and optionally install it to the python path.")
+    ap.add_argument('--vis', default=False, const=True, action='store_const', help="Visualize with dot.")
     ap.add_argument('--dot', type=str, help="Dot output file.")
     ap.add_argument('language', type=str, help="Language module name to use.")
     ap.add_argument('input_file', type=str, help="Input file to parser.")
@@ -42,3 +54,5 @@ if __name__ == '__main__':
     if args.dot:
         d.write_dot(parse_tree, args.dot)
     
+    if args.vis:
+        d.vis_dot(parse_tree)
