@@ -203,7 +203,7 @@ private:
     StringTable &stringTable;
     int count;
     bool reachedEnd;
-    int line = 0;
+    int line = 1;
     
 
     siter advanceBy(size_t count) {
