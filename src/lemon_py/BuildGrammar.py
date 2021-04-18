@@ -22,7 +22,7 @@ def gpp_command(module_name: str):
     pyinclude = subprocess.check_output(['python3-config', '--includes']).decode().strip()
     pylink = subprocess.check_output(['python3-config', '--ldflags']).decode().strip()
 
-    retval = list('g++ -O3 -Wall -shared -std=c++17 -fPIC'.split())
+    retval = list('g++ -O3 -Wall -shared -std=c++17 -fPIC -fvisibility=hidden'.split())
     retval.extend(pyinclude.split())
     retval.extend(pylink.split())
     retval.extend([

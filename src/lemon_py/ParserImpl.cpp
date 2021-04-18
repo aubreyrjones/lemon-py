@@ -1,6 +1,4 @@
 #line 2 "ParserImpl.cpp"
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
 
 #include <memory>
 #include <vector>
@@ -26,7 +24,14 @@ void LemonPyParseFree(void *p, void (*freeProc)(void*));
 void LemonPyParse(void *yyp, int yymajor, _parser_impl::Token yyminor, _parser_impl::Parser *);
 
 
+#ifndef LEMON_PY_SUPPRESS_PYTHON
+
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 namespace py = pybind11;
+
+#endif
+
 
 namespace _parser_impl {
 
@@ -489,9 +494,10 @@ struct ParseNode {
     int64_t line;
     std::vector<ParseNode> children;
     int id;
+    py::dict attr;
 
-    ParseNode() : production(), tokName(), value(), line(-1), children(), id(-1) {}
-    ParseNode(ParseNode && o) : production(std::move(o.production)), tokName(std::move(o.tokName)), value(std::move(o.value)), line(o.line), children(std::move(o.children)), id(o.id) {
+    ParseNode() : production(), tokName(), value(), line(-1), children(), id(-1), attr() {}
+    ParseNode(ParseNode && o) : production(std::move(o.production)), tokName(std::move(o.tokName)), value(std::move(o.value)), line(o.line), children(std::move(o.children)), id(o.id), attr(std::move(o.attr)) {
         o.id = -1;
     }
 
@@ -504,11 +510,12 @@ struct ParseNode {
         children = move(o.children);
         id = o.id;
         o.id = -1;
+        attr = move(o.attr);
 
         return *this;
     }
 
-
+#ifndef LEMON_PY_SUPPRESS_PYTHON
     ParseNode(ParseNode const&) = default;
     ParseNode& operator=(ParseNode const&) = default;
 
@@ -523,6 +530,7 @@ struct ParseNode {
     py::object getToken() const {
         return string_or_none(tokName);
     }
+#endif
 
     std::string toString() {
         char outbuf[1024]; // just do the first 1k characters
@@ -623,7 +631,7 @@ ParseNode parse_string(std::string const& input) {
 
 }
 
-
+#ifndef LEMON_PY_SUPPRESS_PYTHON
 PYBIND11_MODULE(PYTHON_PARSER_MODULE_NAME, m) {
     m.def("parse", &parser::parse_string, "Parse a string into a parse tree.");
     m.def("dotify", &parser::dotify, "Get a graphviz DOT representation of the parse tree.");
@@ -637,6 +645,8 @@ PYBIND11_MODULE(PYTHON_PARSER_MODULE_NAME, m) {
     .def_readonly("line", &parser::ParseNode::line, "Line number of appearance.")
     .def_readonly("c", &parser::ParseNode::children, "Children.");
 }
+#endif
 
 #define pnn(v) p->make_node(v)
+#define pmn(v) p->make_node(v)
 
