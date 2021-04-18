@@ -2,8 +2,8 @@
 @pymod expr_parse
 
 @lexdef
-!whitespace : \\s
-!comment : //.*\\n
+!whitespace : \s
+!comment : //.*\n
 
 ' := CHAR
 " := STRING
@@ -20,10 +20,10 @@ N_EQ := !=
 LT := <
 SPACESHIP := <=>
 
-FLOAT_LIT : [0-9]+\\.[0-9]+
+FLOAT_LIT : [0-9]+\.[0-9]+
 INT_LIT : [0-9]+
-FNCALL : ([_a-z][_a-z0-9\\?]*)\\s*\\( 
-IDENT : [_a-z][_a-z0-9\\?]*
+FNCALL : ([_a-z][_a-z0-9\?]*)\s*\( 
+IDENT : [_a-z][_a-z0-9\?]*
 
 
 @endlex

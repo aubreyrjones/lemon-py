@@ -16,27 +16,30 @@ LEXER_END = \
 
 '''
 
+def escape_backslash(s: str):
+    return s.replace('\\', '\\\\')
+
 def extract_lexer_def(lemon_source: str) -> List[Tuple[str, str]]:
     start = lemon_source.find('@lexdef')
     if start < 0:
         raise RuntimeError("No lexer definition found.")
     end = lemon_source.find('@endlex', start)
-    lines = map(lambda s: tuple(s.strip().split(':')), lemon_source[start:end].splitlines()[1:])
+    lines = map(lambda s: tuple(s.strip().split(':', 1)), lemon_source[start:end].splitlines()[1:])
     lines = filter(lambda t: len(t) == 2, lines)
     lines = list(map(lambda t: (t[0].strip(), t[1].strip()), lines))
     return lines
 
 
-def implement_skip(regex: str):
-    return f"_parser_impl::Lexer::add_skip(\"{regex}\");\n"
+def implement_skip(re_str: str):
+    return f"_parser_impl::Lexer::add_skip(\"{escape_backslash(re_str)}\");\n"
 
 
 def implement_literal(token, litval):
-    return f"_parser_impl::Lexer::add_literal({token}, \"{litval}\");\n" + map_token_name(token)
+    return f"_parser_impl::Lexer::add_literal({token}, \"{escape_backslash(litval)}\");\n" + map_token_name(token)
 
 
-def implement_regex(token, regex):
-    return f"_parser_impl::Lexer::add_value_type({token}, \"{regex}\");\n" + map_token_name(token)
+def implement_regex(token, re_str):
+    return f"_parser_impl::Lexer::add_value_type({token}, \"{escape_backslash(re_str)}\");\n" + map_token_name(token)
 
 
 def map_token_name(token):

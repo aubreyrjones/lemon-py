@@ -339,12 +339,14 @@ public:
         return std::nullopt;
     };
 
+    int const& getLine() const { return line; }
+
     bool consumedInput() {
         return curPos == input.cend();
     }
 
-    std::string remainder() {
-        return std::string(curPos, input.cend());
+    std::string remainder(size_t len = 0) {
+        return std::string(curPos, len && (curPos + len < input.cend()) ? (curPos + len) : input.cend());
     }
 
     int getCount() const {
@@ -607,7 +609,9 @@ ParseNode parse_string(std::string const& input) {
     }
 
     if (!lexer.consumedInput()) {
-        throw std::runtime_error(std::string("Input not consumed. Remaining: ") + lexer.remainder());
+        char buf[1024];
+        snprintf(buf, 1024, "Lexer failure on line %d. Around here:\n", lexer.getLine());
+        throw std::runtime_error(std::string(buf) + lexer.remainder(100));
     }
 
     if (p.root) { // successful parse.

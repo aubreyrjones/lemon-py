@@ -1,0 +1,67 @@
+vertex_pos {
+  v[v_pos] = u[viewMatrix: mat4] *
+             u[modelMatrix: mat4] *
+             vec4(a[v_inPosition: vec3], 1)
+           
+  v[gl_Position] = u[projMatrix: mat4] * v_pos
+}
+
+vertex_surface_normals {
+  v[v_normal] = u[u_normalMat: mat3] * a[v_inNormal: vec3]
+}
+
+struct point_light {
+  position: vec3
+  color: vec4
+}
+
+
+
+phong_lighting {  
+  v[v_color] = a[v_inColor: vec4]
+
+  u[point_lights: point_light@16]    ; declares an array of size 16
+  v[v_normal: vec3]
+  v[v_pos: vec3]
+
+  def L
+    lightPos: vec3, fragPos: vec3 =>    ; no stage scope for L, simple expression function
+      normalize(lightPos - fragPos)
+
+
+  def f[pointLightContrib] light =>    ; since pointLightContrib has f-stage scope...
+    light.color * max(0, v_normal *. L(light.position, v_pos))    ; ... it closes over the fragment inputs.
+
+  def f[pointLight]
+    light =>
+      {
+        any(light.color) => clamp(pointLightContrib(light), 0, 1)    ; if light.color is truthy, there's your answer
+        _ => vec4(0)    ; _ is the default case
+      }
+  
+  f[out_color: 0] =    ; inline output index spec
+    __(point_lights,    ; __(array, f, g) is short (and optimized) for reduce(map(array, f), g).
+       pointLight,
+       \accum, item => accum + item)    ; you could also just use `add` instead, but this is an example
+           ; map/reduce is the main form of repetition in Parasol.
+  
+}
+
+complete_phong_pipeline {
+  include vertex_pos
+  include vertex_surface_normals
+  include phong_lighting
+
+  ; the next part is optional, and the parasol compiler will provide
+  ; indices if you don't want to spec them. You'll have to query them
+  ; out of the resultant linked object.
+  
+  ; alternatively, they can be spec'd inline with a[varName: type index]
+  ; although this makes pipelines such pipelines difficult to compose
+
+  a[v_inPosition: 0]    ; spec attribute indices
+  a[v_inNormal: 1]
+  a[v_inColor: 2]
+  
+  ; f[out_color] was spec'd inline.
+}
