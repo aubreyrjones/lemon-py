@@ -6,49 +6,50 @@
 !whitespace : \s+
 !comment : ;.*\n
 
-L_CURLY := {
-R_CURLY := }
-DEF := def
-GOESTO := =>
-LAMBDA := \
-COMMA := ,
-STRUCT := struct
-INCLUDE := include
-AS := as
-LET := let
-EQUALS := =
-L_AND := &&
-L_OR := ||
-B_AND := &
-B_OR := |
-LESS := <
-LESS_EQ := <=
-GREATER := >
-GREATER_EQ := >=
-EQ := ==
-NOT_EQ := !=
-PLUS := +
-MINUS := -
-MULT := *
-DIV := /
-DOT := *.
-SWIZZLE := .
-SEQUENCE := ..
-NOT := !
-ELSE := else
-R_BRACKET := ]
-COLON := :
-L_PAREN := (
-R_PAREN := )
-IN := in
-ARRAY := @
+STRUCT      :=  struct    : [^\w_\?] 
+INCLUDE     :=  include   : [^\w_\?]
+IN          :=  in        : [^\w_\?]
+ELSE        :=  else      : [^\w_\?]
+DEF         :=  def       : [^\w_\?]
+AS          :=  as        : [^\w_\?]
+LET         :=  let       : [^\w_\?]
+L_CURLY     :=  {
+R_CURLY     :=  }
 
-FLOAT_LIT : -?[0-9]+\.[0-9]*
-INT_LIT : -?[0-9]+
+GOESTO      :=  =>
+LAMBDA      :=  \
+COMMA       :=  ,
+EQUALS      :=  =
+L_AND       :=  &&
+L_OR        :=  ||
+B_AND       :=  &
+B_OR        :=  |
+LESS        :=  <
+LESS_EQ     :=  <=
+GREATER     :=  >
+GREATER_EQ  :=  >=
+EQ          :=  ==
+NOT_EQ      :=  !=
+PLUS        :=  +
+MINUS       :=  -
+MULT        :=  *
+DIV         :=  /
+DOT         :=  *.
+SWIZZLE     :=  .
+SEQUENCE    := ..
+NOT         :=  !
+R_BRACKET   :=  ]
+COLON       :=  :
+L_PAREN     :=  (
+R_PAREN     :=  )
+ARRAY       :=  @
 
-FNCALL : ([_a-z][_a-z0-9\?]*)\s*\(
-SCOPEREF : ([_a-z][_a-z0-9\?]*)\s*\[
-ID : [_a-z][_a-z0-9\?]*
+FLOAT_LIT   :   -?[0-9]+\.[0-9]*
+INT_LIT     :   -?[0-9]+
+
+FNCALL      :   ([_a-z][_a-z0-9\?]*)\s*\(
+SCOPEREF    :   ([_a-z][_a-z0-9\?]*)\s*\[
+ID          :   [_a-z][_a-z0-9\?]*
 
 @endlex
 */

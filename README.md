@@ -221,13 +221,36 @@ order in which you define overlapping literals is largely irrelevant
 disjoint literals). Literal tokens are returned by Lemon-defined code
 number, without an additional text value.
 
+NOTE: leading/trailing whitespace is _not_ preserved on the right side
+of the definition. The definition string is subjected to `str.strip()`
+prior to codegen.
+
 Literal syntax: `TOKEN := literal_string`.
+
+Literal tokens have a higher priority than value tokens below, and so
+may erroneously consume the prefix of a value token. For instance,
+defining a literal matching `else` would consume the first part of a
+variable named `elsewhere`, generating a mis-parse or parse error. To
+solve this problem, literals may optionally be declared with a
+terminator pattern. The pattern is a regular expression which _must
+match_ the input after the literal string in order for the literal to
+match. The terminator characters themselves are _not consumed_ as
+input, but are only used as a lookahead check to aid in matching the
+literal.
+
+NOTE: The brain-dead parser for the lexer definitions splits the input
+on `:` surrounded by whitespace in order to find the terminator
+expression. This means you probably cannot define a terminator
+expression for a literal internally containing a `:` surrounded by
+spaces.
+
+Literal syntax with terminator: `TOKEN := literal_string : regular_expression`
  
 "value" tokens are defined by a regular expression, and are returned
 with both a token code and a text value. A single sub-match may be
 specified, and if present will denote a partial value to be extracted
 from the overall token match [note: this could be expanded with
-relative ease to permit specification of a particular match within the
+relative ease to permit selection of a particular match within the
 pattern]. No type conversions are done, all values are returned as
 strings.
 
@@ -266,22 +289,19 @@ made configurable if the `@lexdef` language were enhanced to support
 the definition.]
 
 String syntax:
-       * `" := STRING_TOK`
-       * `' := CHAR_TOK`
+
+* `" := STRING_TOK`
+* `' := CHAR_TOK`
 
 Token classes are tested in the following order:
-      0. (skips)
-      1. strings
-      2. literals
-      3. values
+
+0. (skips)
+1. strings
+2. literals
+3. values
 
 Skips are applied repeatedly, before checking for the next lexical
 token, until no skip consumes input.
-
-[TODO: this ordering currently means that literals will consume the
-beginnings of e.g. identifiers. This isn't ideal. I should probably
-add an "ends with whitespace" option for literals that might look like
-part of some other token.]
 
 
 Parser Definition

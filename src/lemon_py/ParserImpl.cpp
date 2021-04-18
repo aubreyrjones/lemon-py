@@ -116,30 +116,37 @@ template <typename V_T>
 struct PTNode {
     char code;
     std::optional<V_T> value;
+    std::optional<std::regex> terminatorPattern;
 
     std::vector<PTNode> children;
 
-    PTNode(char code, std::optional<V_T> const& value) : code(code), value(value), children() {}
+    PTNode(char code, std::optional<V_T> const& value, std::optional<std::regex> const& terminator) : code(code), value(value), terminatorPattern(terminator), children() {}
 
-    void add_value(std::string_view const& code, V_T const& value) {
+    void add_value(std::string_view const& code, V_T const& value, std::optional<std::regex> const& terminator = std::nullopt) {
         if (code.length() == 0) {
             this->value = value;
+            this->terminatorPattern = terminator;
             return;
         }
 
         for (auto & c : children) {
             if (c.code == code[0]) {
-                c.add_value(code.substr(1, code.length() - 1), value);
+                c.add_value(code.substr(1, code.length() - 1), value, terminator);
                 return;
             }
         }
 
-        children.emplace_back(code[0], std::nullopt);
-        children.back().add_value(code.substr(1, code.length() - 1), value);
+        children.emplace_back(code[0], std::nullopt, std::nullopt);
+        children.back().add_value(code.substr(1, code.length() - 1), value, terminator);
+    }
+
+    bool tryTerminator(std::string::const_iterator const& first, std::string::const_iterator const& last) const {
+        if (!terminatorPattern) return true;
+
+        return std::regex_search(first, last, terminatorPattern.value(), std::regex_constants::match_continuous);
     }
 
     using LexResult = std::tuple<V_T, std::string::const_iterator>;
-
     std::optional<LexResult> tryValue(std::string::const_iterator first, std::string::const_iterator last) const {
         //std::cout << "Checking " << std::string(first, last) << " against " << code << std::endl;
         if (children.empty() || first == last) { // reached end of input or end of chain while still matching.
@@ -155,13 +162,17 @@ struct PTNode {
         }
 
         bailout:
-        if (value) { // 
+        if (value && tryTerminator(first, last)) {
                 return std::make_tuple(value.value(), first);
         }
 
         return std::nullopt;
     }
 };
+
+std::regex s2regex(std::string const& s) {
+    return std::regex(s, std::regex::icase | std::regex::ECMAScript)
+}
 
 /**
  * This is a relatively basic lexer. It handles two classes of tokens, plus skip patterns.
@@ -183,18 +194,23 @@ struct PTNode {
 */
 struct Lexer {
     static PTNode<int> literals;
-    static void add_literal(int tok_code, std::string const& code) {
-        literals.add_value(code, tok_code);
+    static void add_literal(int tok_code, std::string const& code, std::optional<std::string> const& terminator = std::nullopt) {
+        literals.add_value(
+                          code, 
+                          tok_code, 
+                          terminator ? 
+                            std::make_optional(s2regex(terminator.value()))
+                            : std::nullopt);
     }
 
     static std::vector<std::regex> skips;
     static void add_skip(std::string const& r) {
-        skips.push_back(std::regex(r, std::regex::icase | std::regex::ECMAScript));
+        skips.push_back(s2regex(r));
     }
 
     static std::vector<std::tuple<std::regex, int>> valueTypes;
     static void add_value_type(int tok_code, std::string const& r) {
-        valueTypes.push_back(std::make_tuple(std::regex(r, std::regex::icase | std::regex::ECMAScript), tok_code));
+        valueTypes.push_back(std::make_tuple(s2regex(r), tok_code));
     }
 
     static int singleQuoteToken;
@@ -363,7 +379,7 @@ void _init_lexer();
 
 int Lexer::singleQuoteToken = 0;
 int Lexer::doubleQuoteToken = 0;
-PTNode<int> Lexer::literals(0, std::nullopt);
+PTNode<int> Lexer::literals(0, std::nullopt, std::nullopt);
 std::vector<std::regex> Lexer::skips;
 std::vector<std::tuple<std::regex, int>> Lexer::valueTypes;
 

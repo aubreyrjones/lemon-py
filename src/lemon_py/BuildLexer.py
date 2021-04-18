@@ -1,4 +1,5 @@
 from typing import *
+import re
 
 LEXER_START = \
 '''
@@ -35,6 +36,11 @@ def implement_skip(re_str: str):
 
 
 def implement_literal(token, litval):
+    if ":" in litval:
+        termsplit = re.split('\s+:\s+', litval)
+        if len(termsplit) == 2 and termsplit[0].strip() and termsplit[1].strip():
+            return f"_parser_impl::Lexer::add_literal({token}, \"{escape_backslash(termsplit[0].strip())}\", \"{escape_backslash(termsplit[1].strip())}\");\n" + map_token_name(token)
+        
     return f"_parser_impl::Lexer::add_literal({token}, \"{escape_backslash(litval)}\");\n" + map_token_name(token)
 
 
