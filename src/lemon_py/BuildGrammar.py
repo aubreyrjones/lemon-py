@@ -6,7 +6,7 @@ import pybind11
 import site
 import shutil
 
-import BuildLexer
+from .BuildLexer import make_lexer
 
 def data_file(*filename: str):
     return os.path.join(os.path.abspath(os.path.dirname(__file__)), *filename)
@@ -50,7 +50,7 @@ def concatenate_input(grammar_text: str):
     with open(PARSER_IMPL_FILE, 'r') as f:
         impl_text = f.read()
 
-    lexer_def = BuildLexer.make_lexer(grammar_text)
+    lexer_def = make_lexer(grammar_text)
 
     whole_text = header_text + "\n" + f"%include {{\n{impl_text + lexer_def}\n}}\n" + grammar_text
 

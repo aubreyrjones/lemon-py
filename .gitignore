@@ -1,7 +1,6 @@
-src/crust/ParseTree_py.cpp
-src/crust/parse_tree.py
+
 .vscode
 lemon/lemon
-src/lemon-py/lem*
-src/lemon-py/elsewhere
+src/lemon_py/lem*
+src/lemon_py/elsewhere
 *__pycache__*
