@@ -463,16 +463,19 @@ py::object string_or_none(std::optional<std::string> const& v) {
 }
 
 std::string sanitize(std::string in) {
-    size_t res = 0;
-    while((res = in.find('"', res)) != std::string::npos) {
-        in.erase(res, 1);
-        in.insert(res, "&quot;");
-    }
+    auto clean = [&in] (char c, const char* replace) {
+        size_t res = 0;
+        while((res = in.find(c, res)) != std::string::npos) {
+            in.erase(res, 1);
+            in.insert(res, replace);
+        }
+    };
 
-    while((res = in.find('\'', res)) != std::string::npos) {
-        in.erase(res, 1);
-        in.insert(res, "&apos;");
-    }
+    clean('&', "&amp;");
+    clean('"', "&quot;");
+    clean('\'', "&apos;");
+    clean('<', "&lt;");
+    clean('>', "&gt;");
 
     return std::move(in);
 }
@@ -535,10 +538,10 @@ struct ParseNode {
         char buf[1024];
 
         if (production) {
-            snprintf(buf, 1024, "node [shape=record, label=\"{<f0>line:%ld | <f1> %s }\"] %d;\n", line, production.value().c_str(), id);
+            snprintf(buf, 1024, "node [shape=record, label=\"{<f0>line:%ld | <f1> %s }\"] %d;\n", line, sanitize(production.value()).c_str(), id);
         }
         else {
-            snprintf(buf, 1024, "node [shape=record, label=\"{<f0>line:%ld | { <f1> %s | <f2> %s}}\"] %d;\n", line, tokName.value().c_str(), sanitize(value.value()).c_str(), id);
+            snprintf(buf, 1024, "node [shape=record, label=\"{<f0>line:%ld | { <f1> %s | <f2> %s}}\"] %d;\n", line, sanitize(tokName.value()).c_str(), sanitize(value.value()).c_str(), id);
         }
         out << buf;
 

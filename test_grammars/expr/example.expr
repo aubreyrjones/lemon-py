@@ -2,7 +2,7 @@
 5 
 * 
 3.2 
-+ "a string" *
++ "a string" <= "a string" *
  (3 + 'some chars') / a_variable 
  // another comment
  + function_call (a + x, b / y + x, 
