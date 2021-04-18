@@ -2,7 +2,8 @@
 @pymod parasol_parser
 
 @lexdef
-!whitespace : \s
+
+!whitespace : \s+
 !comment : ;.*\n
 
 L_CURLY := {
@@ -35,8 +36,7 @@ SWIZZLE := .
 SEQUENCE := ..
 NOT := !
 ELSE := else
-R_BRACKET : ]
-
+R_BRACKET := ]
 COLON := :
 L_PAREN := (
 R_PAREN := )
@@ -49,9 +49,10 @@ INT_LIT : -?[0-9]+
 FNCALL : ([_a-z][_a-z0-9\?]*)\s*\(
 SCOPEREF : ([_a-z][_a-z0-9\?]*)\s*\[
 ID : [_a-z][_a-z0-9\?]*
-@endlex
 
+@endlex
 */
+
 module ::= global_list(c1).                                       { p->push_root(p->mn("root"))->pb(c1)->l(c1->line); }
 
 

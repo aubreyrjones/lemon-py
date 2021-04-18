@@ -112,7 +112,7 @@ def build_grammar(grammar_file_path: str, install = False, use_temp = True, prin
 if __name__ == '__main__':
     import argparse
     ap = argparse.ArgumentParser(description="Build a grammar and optionally install it to the python path.")
-    ap.add_argument('--terminals', default=False, const=True, action='store_const', help="Print the terminals header to the terminal.")
+    ap.add_argument('--terminals', default=False, const=True, action='store_const', help="Print the terminals header to the terminal (heh).")
     ap.add_argument('--debug', default=False, const=True, action='store_const', help="Don't use a temp directory and don't install the language.")
     ap.add_argument('grammar_file', type=str, help="The grammar file to build.")
     args = ap.parse_args()

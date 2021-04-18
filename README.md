@@ -71,12 +71,12 @@ trivial value types), this inclines the AST design toward owning raw
 pointers, which feels pretty gross here in 2021.
 
 Likewise, since I'm rarely targeting general-purpose languages where
-translation units become enormous, nor am I often targeting machine
-code back ends where bit-twiddling and binary representation are
-routine, I don't need blinding performance and implementing the whole
-of my compiler in C++ often feels onerous. I want my favorite parser
-available from Python, with the option of using the same grammar in
-C++ if I'm ready to build a native compiler.
+translation units become enormous, nor am I often targeting machine-
+code back ends where bit-twiddling and isomorphic binary
+representation are routine, and I don't need blinding performance...
+implementing the whole of my compiler in C++ often feels onerous. I
+want my favorite parser available from Python, with the option of
+using the same grammar in C++ if I'm ready to build a native compiler.
 
 There exist other LR or LALR parser generators for Python:
 
@@ -91,7 +91,7 @@ code, which can make them attractive for certain applications. I do
 not like that approach, as I find reading and following the recursion
 of different rules much more complicated when cluttered by the Python
 syntax on top of the grammar's own definition syntax. You might like
-it better than writing C++ grammar actions.
+it better than writing C++ grammar actions, though.
 
 Lark is probably the closest in capabilities and design to lemon-py,
 in that it is driven by a data file (string) defining the grammar. It
@@ -152,50 +152,107 @@ The parse tree is represented by a module-defined class implemented in
 C++, with name `ParseNode`. You can use the usual `help` and `dir`
 functions to explore it.
 
-The module also supports a `dotify(input: ParseNode) -> str`
+`ParseNode` instances have read-only `.production`, `.type`, `.value`,
+`.line`, and `.c` members. `.line` contains line number information
+(or `-1` if unkown/unset), and line counts start from `1` (not
+`0`).
+
+`.c` is the list of this node's children.
+
+`.production` is a user-defined (in the grammar action) string for
+non-terminal (internal) nodes. It has a `None` value for terminal
+(leaf) nodes.
+
+For terminal (leaf) nodes, `.type` contains a string identical to the
+token name used in the Lemon grammar. For value-typed tokens, `.value`
+contains the value for that token--note that this is a string of the
+characters matched for the token, as no internal type conversions are
+performed. Both `.type` and `.value` will be `None` for non-terminal
+(internal) nodes; and `.value` will be none for literal-type tokens.
+
+The module also exports a `dotify(input: ParseNode) -> str`
 function. This returns a string representing the parse tree and its
-values, suitable for rendering using GraphViz `dot`.
+values, suitable for rendering using GraphViz `dot`. Note that this
+function does not call or depend on GraphViz internally, doing all its
+processing as raw text. GraphViz is only needed to interpret the
+output.
+
+
+Module Definition
+_________________
+
+lemon-py grammar definitions must include a `@pymod MODULE_NAME`
+directive somewhere indicating the Python `MODULE_NAME` to
+generate. This text is not removed before processing, and so should be
+inside a comment. Example:
+       * `//@pymod parse_my_lang`
 
 
 Lexer Definitions
 -----------------
 
-Lexer definitions start inside a comment block, on the line following
-`@lexdef` and continuing until `@endlex`. Note that these lines are
-_not_ removed from the grammar input to `lmeon`, and so should always
-be inside a comment block.
+An integrated lexer is one of lemon-py's labor-saving
+features. Without it, you would need to write a lexer for each target
+language. For the purposes of this (and only this) section, words like
+"returned" and "value" should be taken in the context of the internal
+lexer->parser interface used inside of grammar production
+rules.
 
-The lexer is relatively basic. It handles two classes of tokens,
-plus skip patterns and strings.
+Lexer definitions appear inside a comment block as a contiguous run of
+`token : pattern` definitions, one per line, starting on the line
+following `@lexdef` and continuing until `@endlex`. Note that these
+lines are _not_ removed from the grammar input to `lmeon`, and so
+should always be inside a comment block. It's an error, resulting in
+mysterious downstream problems, to define multiple `@lexdef`
+blocks. Do it once; do it right.
+
+The lexer itself is relatively basic. It handles two classes of tokens
+("literal" and "value"), plus user-defined skip patterns and
+pre-defined string support. Declarations of different classes may be
+mixed in the `@lexdef` block, and the ordering rules discussed below
+apply only to the relative definition of different tokens of the _same
+class_.
 
 "literal" tokens are defined by a fixed string of characters, and are
-stored in a basic prefix tree. These are matched greedily, with the
-longest matching sequence having priority. Literal tokens are returned
-by lemon-defined code number, without an additional text value.
+stored/matched with a basic prefix tree. Literals are matched
+greedily, with the longest matching sequence having priority. Thus the
+order in which you define overlapping literals is largely irrelevant
+(although definition order will influence search order between
+disjoint literals). Literal tokens are returned by Lemon-defined code
+number, without an additional text value.
 
 Literal syntax: `TOKEN := literal_string`.
  
 "value" tokens are defined by a regular expression, and are returned
 with both a token code and a text value. A single sub-match may be
-specified to denote a partial value extraction from the overall token
-match [note: this could be expanded with relative ease to permit
-specification of a particular match within the pattern]. No type
-conversions are done, all values returned are strings.
+specified, and if present will denote a partial value to be extracted
+from the overall token match [note: this could be expanded with
+relative ease to permit specification of a particular match within the
+pattern]. No type conversions are done, all values are returned as
+strings.
 
 Value token patterns are checked in the same order they are defined
 with `add_value_type`, which is the same order they're specified in
 the `@lexdef` block. Typically this means you should specify longer,
 more specific patterns first; and then shorter, or more generic
 patterns after. For instance, to keep your `INT_LITERAL` from always
-eating the first part of a `FLOAT_LITERAL`, define the floating-point
-literal (with mandatory decimal point) _before_ the integer literal.
+eating the first part of a `FLOAT_LITERAL` (resulting in subsequent
+lex or parse errors), define the floating-point literal (with
+mandatory decimal point) _before_ the integer literal.
 
-Value syntax: `TOKEN : regular_expression`. 
+NOTE: All regular expressions are currently matched *without* case
+sensitivity.
+
+Value syntax: `TOKEN : regular_expression`.
  
 Skip patterns are simply regexes that are used to skip whitespace,
 comments, or other lexically and syntactically-irrelevant
 content. Skip patterns are applied before every attempt at token
-extraction.
+extraction. The `reminder_name` below is not used internally, and can
+simply be used to label the skip pattern for human comprehension.
+
+NOTE: All regular expressions are currently matched *without* case
+sensitivity.
 
 Skip syntax: `!reminder_name : regular_expression`.
 
@@ -209,8 +266,22 @@ made configurable if the `@lexdef` language were enhanced to support
 the definition.]
 
 String syntax:
-       `" := STRING_TOK`
-       `' := CHAR_TOK`
+       * `" := STRING_TOK`
+       * `' := CHAR_TOK`
+
+Token classes are tested in the following order:
+      0. (skips)
+      1. strings
+      2. literals
+      3. values
+
+Skips are applied repeatedly, before checking for the next lexical
+token, until no skip consumes input.
+
+[TODO: this ordering currently means that literals will consume the
+beginnings of e.g. identifiers. This isn't ideal. I should probably
+add an "ends with whitespace" option for literals that might look like
+part of some other token.]
 
 
 Parser Definition
@@ -221,18 +292,27 @@ stuff. It's not especially intuitive if you've never used a parser
 generator before, and teaching you to use one is beyond the scope of
 this readme. I suggest the Dragon Book (you know the one), or any of
 the various tutorials on using Bison/Yacc. The concepts are highly
-transferable. The `test_grammars/parasol` directory contains a draft
-of the grammar for a fairly "complete" programming language, including
-a non-trivial expression tree.
+transferable. 
+
+The `test_grammars/parasol` directory contains a draft of the grammar
+for a fairly "complete" programming language, including a non-trivial
+expression tree. This goes well beyond the usual toy examples provided
+with parser generators. One real-world "wrinkle" to note is the use of
+the lexer to detect function calls and "scope refs" instead of the
+parser (by id with trailing `(` and `[` respectively), thereby
+avoiding ambiguities around function argument lists inside expression
+trees.
 
 The actual Lemon parser-definition language is unchanged, as the
 `lemon` source code and `lempar.c` template are completely unchanged
-from the sqlite release. However, a standard set of headers and
-definitions is available for use inside the parser actions to make
-generic parse-tree construction much easier.
+from the sqlite release. Instead, a standard set of headers is
+included providing definitions available for use inside the parser
+actions. These definitions make it relatively trivial to generate
+generic parse trees to represent anything Lemon can parse.
 
 A variable `_parser_impl::Parser *p` is available in every parser
-action. This forms the handle to most of the interface.
+action. This forms the handle to most of the interface. Call the
+functions below like `p->mn(...)`.
 
 Available functions are as follows:
 
@@ -253,8 +333,10 @@ first argument, the line is automatically filled in for you; for
 non-terminal productions, you'll need to assign the node its line
 manually. Returns the newly-created node.
 
-`pb` stands for `push_back` and adds a child at the right end of an
-existing node. Returns the _containing_ (not child) node.
+`pb` stands for `push_back` and adds a child to right of a node's
+existing children. Note that this function is defined on the
+`ParseNode`, not on the `Parser`. Returns the _containing_ (not child)
+node.
 
 
 How Does It Work?
@@ -262,28 +344,32 @@ How Does It Work?
 
 Most of the moving parts are in `ParserImpl.cpp`, which implements the
 lexer, parse tree, and Python module interface. A small amount of code
-is generated to configure the lexer (the `_init_lexer()` function),
-but this is merely appended to the verbatim `ParseImpl.cpp` file.
+(`void _init_lexer(){...}`) is generated to configure the lexer from the
+input file, but this is merely appended to the verbatim
+`ParseImpl.cpp` file.
 
-A number of weird decisions in the C++ widgetry are the result of
-adapting to the Lemon grammar action environment. Critically, Lemon
-puts the token type and the type of every production rule into a
-single giant `union`, by value. This means they must be trivial types,
-which eliminates the direct use of smart pointers or containers to
-manage memory. Instead, the lemon-py `Parser` object internally
-allocates nodes into `unique_ptr`s and returns a raw pointer to the
-same object for use within the Lemon grammar actions. Tokens are
-treated similarly, with an integer terminal-code value member, but
-pointer and index into a table instead of an internal
-`std::string`. When the `Parser` is destructed, all of the node and
-string memory is reclaimed and all `_parser_impl::ParseNode` and
-`Token` objects created by that `Parser` become invalid.
+A number of seemingly-weird decisions in the C++ widgetry are the
+result of adapting to the Lemon grammar action
+environment. Critically, Lemon puts the token type and the type of
+every production rule into a single giant C `union`. This means they
+must be trivial types, which eliminates the direct use of smart
+pointers or containers to manage memory within grammar
+actions. Instead, the lemon-py `_parser_impl::Parser` object
+internally allocates nodes into `unique_ptr`s and returns a raw
+pointer to the same object for use within the Lemon grammar
+actions. Value tokens are treated similarly, with an integer
+terminal-code value member, but pointer and index into a table instead
+of an internal `std::string`. When the `Parser` is destructed, all of
+the node and string memory is reclaimed and all
+`_parser_impl::ParseNode` and `Token` objects created by that `Parser`
+become invalid.
 
 Before returning the parse tree to the Python interface, and before it
 is destroyed (of course), the entire pointer-based internal parse tree
-is copied into a simplified, value-typed representation
-(`parser::ParseNode`). The intermediate, indirect tree is deallocated
-and the returned tree is free of any complicated ownership semantics.
+is dereferenced and copied into a simplified, value-typed
+representation (`parser::ParseNode`). The intermediate, indirect tree
+is deallocated and the returned tree is free of any complicated
+ownership semantics.
 
 The python aspect of lemon-py reads the grammar file, builds the lexer
 configuration, wraps the impl code into an `%include{}` block, and
@@ -306,16 +392,20 @@ The biggest limitation is probably that the parsers generated by
 lemon-py operate on in-memory strings, with no support for incremental
 reads from irreversible streams. This vastly eases implementation of
 the lexer, which can look ahead an arbitrary number of characters
-without side effect as it tests different lexical matches. The
-`pybind11` wrapper is also liable to _copy_ the input string from
+without side effect as it tests different lexical matches. 
+
+The `pybind11` wrapper is also liable to _copy_ the input string from
 Python into a `std::string` before passing it to the native `parse()`
 function. From a performance perspective, this is effectively
-invisible compared to Python interpreter startup time, but it does
-mean that lemon-py parsers are probably not suitable for parsing
-really huge inputs that challenge system memory limits. Enhancing
-lemon-py to operate on irreversible iterators would require
-substantial improvements to the lexer. I don't currently need such a
-thing, and I don't have the energy to implement it just 'cause.
+invisible compared to Python performance, but the redundant memory
+usage does mean that lemon-py parsers are probably not suitable for
+parsing really huge inputs that challenge system memory
+limits.
+
+Enhancing lemon-py to operate on irreversible iterators would require
+substantial modification to the lexer, with implications on the ease
+of defining a new lexer. I don't currently need such a thing, and I
+don't have the energy to implement it just for completeness' sake.
 
 The same goes for the output, which is a value-typed tree full of
 (potentially-redundant) strings. For very large inputs, and especially
@@ -331,6 +421,20 @@ when moving from typical usage to large-scale usage. The biggest gains
 come from rewriting with a high-level AST, built directly in the
 grammar actions, which can collapse many intermediate parse nodes into
 fewer syntax nodes.
+
+Finally, in the memory hog department, I use recursive functions all
+over the place. If you have really recursive grammars or extremely
+long lexer literals, you might run into the stack limit on your
+machine. I've been programming for 25+ years now have have _only_ run
+out of stack when there's been an error causing infinite recursion.
+
+lemon-py is also probably unsuitable for parsing binary or unicode
+streams. The underlying Lemon parsers are fully capable of working
+with anything you can tokenize, but the lemon-py lexer implementation
+is basically character-oriented and currently limited to 8-bit ASCII
+text. Support for unicode could be accomplished with relatively
+straightforward enhancements to the lexer, but I don't know about
+`std::regex` on binary strings.
 
 
 Anticipated Questions
@@ -358,7 +462,12 @@ boilerplate C.
 Q. Why C++17 instead of C++(`n < 17`)?
 
 A. I like modern C++. I don't really like solving the same problems in
-boilerplate antique C++.
+antique C++.
+
+
+Q. Why C++17 instead of C++(`n > 17`)?
+
+A. System compiler support.
 
 
 Q. Why hardcode to `g++` instead of configurable compiler?
