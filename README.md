@@ -181,11 +181,12 @@ output.
 Module Definition
 _________________
 
-lemon-py grammar definitions must include a `@pymod MODULE_NAME`
+Lemon-py grammar definitions must include a `@pymod MODULE_NAME`
 directive somewhere indicating the Python `MODULE_NAME` to
 generate. This text is not removed before processing, and so should be
 inside a comment. Example:
-       * `//@pymod parse_my_lang`
+
+* `//@pymod parse_my_lang`
 
 
 Lexer Definitions

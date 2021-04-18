@@ -4,3 +4,7 @@ lemon/lemon
 src/lemon_py/lem*
 src/lemon_py/elsewhere
 *__pycache__*
+
+
+*.so
+*concat_grammar.*
