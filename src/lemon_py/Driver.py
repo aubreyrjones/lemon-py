@@ -24,6 +24,7 @@ import importlib
 import argparse
 import tempfile
 import subprocess
+import json
 from os import path
 
 class Driver:
@@ -36,7 +37,7 @@ class Driver:
     def parse(self, instr: str):
         return self._parse_fn(instr)
     
-    def dotify(self, parse_tree):
+    def dotify(self, parse_tree) -> str:
         return self._dot_fn(parse_tree)
 
     def write_dot(self, parse_tree, outfile_path):
@@ -50,6 +51,9 @@ class Driver:
             self.write_dot(parse_tree, outfile)
             subprocess.call(["dot", "-Tpng", f"-o{pngfile}", outfile]) # dot -Tpng -O out.dot && display out.dot.png
             subprocess.call(["display", pngfile])
+    
+    def to_json(self, parse_tree) -> str:
+        return json.dumps(parse_tree.as_dict(), indent=1)
 
 
 if __name__ == '__main__':
@@ -58,6 +62,7 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser(description="Build a grammar and optionally install it to the python path.")
     ap.add_argument('--vis', default=False, const=True, action='store_const', help="Visualize with dot.")
     ap.add_argument('--dot', type=str, help="Dot output file.")
+    ap.add_argument('--json', default=False, const=True, action='store_const', help="Dump a JSON representation of the tree to the console.")
     ap.add_argument('language', type=str, help="Language module name to use.")
     ap.add_argument('input_file', type=str, help="Input file to parser.")
     args = ap.parse_args()
@@ -75,6 +80,9 @@ if __name__ == '__main__':
     
     if args.dot:
         d.write_dot(parse_tree, args.dot)
+    
+    if args.json:
+        print(d.to_json(parse_tree))
     
     if args.vis:
         d.vis_dot(parse_tree)

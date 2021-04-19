@@ -39,6 +39,8 @@ SOFTWARE.
 #include "concat_grammar.h"
 #include <cstdio>
 
+// Forward declarations of types needed for Lemon function forward declarations
+// it's turtles all the way down when you've got no headers lol
 namespace _parser_impl {
     struct Token;
     struct Parser;
@@ -55,6 +57,7 @@ void LemonPyParse(void *yyp, int yymajor, _parser_impl::Token yyminor, _parser_i
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <pybind11/operators.h>
 namespace py = pybind11;
 
 #endif
@@ -108,6 +111,9 @@ public:
 /** Stores mappings from logical token names to string representations. */
 std::unordered_map<int, std::string> token_name_map;
 
+/** Stores mappings from logical literal token names to literal values. */
+std::unordered_map<int, std::string> token_literal_value_map;
+
 /**
  * This is the token value passed into the Lemon parser. It always has a type, 
  * but it might not always have a value. This is indicated by having a 
@@ -119,31 +125,33 @@ std::unordered_map<int, std::string> token_name_map;
  * 
 */
 struct Token {
-    int type;
-    size_t valueIndex;
-    StringTable *valueTable;
-    int line;
+    int type; ///< Numeric type defined by the header 'concat_grammar.h', output by lemon.
+    size_t valueIndex; ///< index into the string table where we can find our value.
+    StringTable *valueTable; ///< pointer to string table of values, or nullptr if this token has no value.
+    int line; ///< line number that the lexer *finished* this token on (sorry)
 
+    /**
+     * Get either the regex-matched value for a value token, or just a copy of the
+     * literal string for a literal token.
+    */
     std::string value() const { 
-        if (valueTable) return valueTable->getString(valueIndex); 
-        return name();
+        if (valueTable) return valueTable->getString(valueIndex);
+        return token_literal_value_map[type];
     }
 
+    /**
+     * Get the name of this token as a string.
+    */
     std::string const& name() const {
         return token_name_map[type];
     }
 
+    /**
+     * Get a reasonable, perhaps truncated, string representation of this token.
+    */
     std::string toString() const {
-        auto const& tokenName = token_name_map[type];
-
         char outbuf[1024]; // just do the first 1k characters
-        if (valueTable) {
-            snprintf(outbuf, 1024, "%s <%s> (line %d)", tokenName.c_str(), value().c_str(), line);
-        }
-        else {
-            snprintf(outbuf, 1024, "%s (line %d)", tokenName.c_str(), line);
-        }
-
+        snprintf(outbuf, 1024, "%s <%s>", name().c_str(), value().c_str());
         return std::string(outbuf);
     }
 };
@@ -159,8 +167,9 @@ Token make_token(int type, StringTable & st, std::string const& s, int line) {
 }
 
 /**
- * This implements a prefix tree, used to match literals in the lexer.
+ * This implements a recursive prefix tree, used to match literals in the lexer.
  * 
+ * Nodes with defined values may also define a terminator pattern, which must match in order for the node to match.
 */
 template <typename V_T>
 struct PTNode {
@@ -200,6 +209,7 @@ struct PTNode {
         return std::regex_search(first, last, terminatorPattern.value(), std::regex_constants::match_continuous);
     }
 
+    /** Value, and an iterator pointing to the input character immediately following the literal. */
     using LexResult = std::tuple<V_T, std::string::const_iterator>;
 
     /**
@@ -228,7 +238,7 @@ struct PTNode {
     }
 };
 
-/** Convert a string into a case-insensitive regex. */
+/** Convert a string into a case-insensitive, ECMA-flavored regex. */
 std::regex s2regex(std::string const& s) {
     return std::regex(s, std::regex::icase | std::regex::ECMAScript);
 }
@@ -648,17 +658,16 @@ namespace parser {
 /** Get a string value or None. */
 py::object string_or_none(std::optional<std::string> const& v) {
     if (!v) {
-        //return py::cast<py::none>(Py_None);
-        return py::none{};
+        return py::none();
     }
     else {
-        return py::cast<py::str>(PyUnicode_FromStringAndSize(v.value().data(), v.value().length()));
+        return py::str(v.value());
     }
 }
 #endif
 
 #ifdef LEMON_PY_SUPPRESS_PYTHON
-    /** Stubs out the `dict` definition when python is suppressed. */
+    /** When python is suppressed, stubs out the `dict` definition used to hold parse node attributes. */
     namespace py { using dict = void*; }
 #endif
 
@@ -715,7 +724,7 @@ struct ParseNode {
         return *this;
     }
 
-    ParseNode(ParseNode const&) = default; // we're values all the way down, so this is fine.
+    ParseNode(ParseNode const&) = default; // we're well-defined to copy all the way down, so this is fine.
     ParseNode& operator=(ParseNode const&) = default;
 
 #ifndef LEMON_PY_SUPPRESS_PYTHON
@@ -731,12 +740,31 @@ struct ParseNode {
     py::object getToken() const {
         return string_or_none(tokName);
     }
+
+    py::dict asDict() const {
+        py::dict myDict;
+        myDict["production"] = getProduction();
+        myDict["type"] = getToken();
+        myDict["value"] = getValue();
+        myDict["id"] = id;
+        myDict["line"] = line;
+        myDict["attr"] = attr;
+
+        auto childList = py::list();
+        for (auto const& c : *this) {
+            childList.append(c.asDict());
+        }
+        myDict["c"] = childList;
+
+        return myDict;
+    }
+
 #endif
 
     /**
      * Return a halfway reasonable string representation of the node (but not its children).
     */
-    std::string toString() {
+    std::string toString() const {
         char outbuf[1024]; // just do the first 1k characters
         if (production) {
             snprintf(outbuf, 1024, "{%s} [%lu]", production.value().c_str(), children.size());
@@ -771,6 +799,63 @@ struct ParseNode {
             c.dotify(out, this);
         }
     }
+
+    /**
+     * Get a particular child node.
+    */
+    ParseNode const& operator[](size_t index) const {
+        if (index >= children.size()) {
+            throw std::runtime_error("Child index out of range.");
+        }
+        return children[index];
+    }
+
+    /**
+     * Get children iterator.
+    */
+    decltype(children)::const_iterator begin() const {
+        return children.cbegin();
+    }
+
+    /**
+     * Get end of children vector.
+    */
+    decltype(children)::const_iterator end() const {
+        return children.cend();
+    }
+
+    /**
+     * Number of children of this node.
+    */
+    size_t childCount() const {
+        return children.size();
+    }
+
+    /**
+     * Checks for syntactic equality. Two nodes are equal if their
+     * productions, token name, and value are identical; as well
+     * as all their children being equal under this same definition.
+     * 
+     * This check is recursive.
+    */
+    bool operator==(ParseNode const& o) const {
+        if (&o == this) return true; // we're always equal to ourselves.
+
+        if (childCount() != o.childCount()) return false; // order these checks from cheapest to most expensive
+        if (tokName != o.tokName) return false;
+        if (production != o.production) return false;
+        if (value != o.value) return false;
+
+        for (auto myC = begin(), oC = o.begin(); myC != end() && oC != o.end(); ++myC, ++oC) {
+            if (*myC != *oC) return false;
+        }
+
+        return true;
+    }
+
+    bool operator!=(ParseNode const& o) const {
+        return !(*this == o);
+    }
 };
 
 /**
@@ -790,7 +875,7 @@ std::string dotify(ParseNode const& pn) {
 }
 
 /**
- * Uplift a node from the internal poiner-based representation into the 
+ * Uplift a node from the internal pointer-based representation into the 
  * external value-semantics representation.
 */
 ParseNode uplift_node(_parser_impl::ParseNode* alien, int & idCounter) {
@@ -801,11 +886,9 @@ ParseNode uplift_node(_parser_impl::ParseNode* alien, int & idCounter) {
         auto tok = std::get<_parser_impl::Token>(alien->value);
         retval.tokName = tok.name();
         retval.value = tok.value();
-        //std::cout << "uplifting " << retval.value.value() << std::endl;
     }
     else {
         retval.production = std::get<std::string>(alien->value);
-        //std::cout << "uplifting " << retval.production.value() << std::endl;
     }
     retval.line = alien->line;
     
@@ -840,17 +923,25 @@ ParseNode parse_string(std::string const& input) {
 
 #ifndef LEMON_PY_SUPPRESS_PYTHON
 PYBIND11_MODULE(PYTHON_PARSER_MODULE_NAME, m) {
-    m.def("parse", &parser::parse_string, "Parse a string into a parse tree.");
+    m.def("parse", &parser::parse_string, "Parse a string into a parse tree.", py::return_value_policy::move);
     m.def("dotify", &parser::dotify, "Get a graphviz DOT representation of the parse tree.");
 
     py::class_<parser::ParseNode>(m, "Node")
     .def(py::init<>())
     .def("__repr__", &parser::ParseNode::toString, "Get an approximation of the representation.")
+    .def("__getitem__", [](parser::ParseNode const& pn, size_t item) -> parser::ParseNode const& { return pn[item]; }, "Get a child by index.")
+    .def("__iter__", [](parser::ParseNode const& pn) { return py::make_iterator(pn.children.cbegin(), pn.children.cend()); }, "Children iterator.")
+    .def("__len__", [](parser::ParseNode const& pn) { return pn.childCount(); }, "Get number of children.")
+    .def("as_dict", &parser::ParseNode::asDict, "Make a deep copy of this node and all children to a dictionary representation. `.attr` is ref-copied, but not deep-copied. ", py::return_value_policy::take_ownership)
+    .def(py::self == py::self)
+    .def(py::self != py::self)
     .def_property_readonly("production", &parser::ParseNode::getProduction, "Get production if non-terminal.")
     .def_property_readonly("type", &parser::ParseNode::getToken, "Get type if terminal.")
     .def_property_readonly("value", &parser::ParseNode::getValue, "Get value if terminal.")
     .def_readonly("line", &parser::ParseNode::line, "Line number of appearance.")
-    .def_readonly("c", &parser::ParseNode::children, "Children.");
+    .def_readonly("c", &parser::ParseNode::children, "Children.")
+    .def_readonly("id", &parser::ParseNode::id, "ID number for this node (unique within tree).")
+    .def_readonly("attr", &parser::ParseNode::attr, "Free-use attributes dictionary.");
 }
 #endif
 
