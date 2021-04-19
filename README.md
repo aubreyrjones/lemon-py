@@ -307,8 +307,8 @@ String syntax examples:
   mostly like normal C-style strings.)
 
 * `' @; := DOC` - assign at-sign delimeted strings to `DOC`, and use
-  the semi-colon as an escape character. Something like `@ look \@ me
-  over here @`.
+  the semi-colon as an escape character. Something like `@look ;@ me
+  over here;;@`.
 
 Token classes are tested in the following order:
 
