@@ -666,15 +666,16 @@ py::object string_or_none(std::optional<std::string> const& v) {
  * Sanitize a string for dot.
 */
 std::string sanitize(std::string in) {
-    auto clean = [&in] (char c, const char* replace) {
+    auto clean = [&in] (char c, const char* replace, int skipForward = 0) {
         size_t res = 0;
-        while((res = in.find(c, res)) != std::string::npos) {
+        while((res = in.find(c, res)) < std::string::npos) {
             in.erase(res, 1);
             in.insert(res, replace);
+            res += skipForward;
         }
     };
 
-    clean('&', "&amp;");
+    clean('&', "&amp;", 1);
     clean('"', "&quot;");
     //clean('\'', "&apos;");
     clean('<', "&lt;");
