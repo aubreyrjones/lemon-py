@@ -44,6 +44,8 @@ namespace _parser_impl {
     struct Parser;
 }
 
+// these are Lemon parser functions.
+
 void* LemonPyParseAlloc(void *(*mallocProc)(size_t));
 void LemonPyParseFree(void *p, void (*freeProc)(void*));
 void LemonPyParse(void *yyp, int yymajor, _parser_impl::Token yyminor, _parser_impl::Parser *);
@@ -71,6 +73,16 @@ protected:
 	PrevMap previousLocations;
 
 public:
+
+    /** Clear table state. */
+    void clear() {
+        previousLocations.clear();
+        strings.clear();
+    }
+
+    /**
+     * Push a string and return the index.
+    */
 	size_t pushString(std::string const& s) {
         PrevMap::iterator it = previousLocations.find(s);
         if (it != previousLocations.end()){
@@ -85,15 +97,22 @@ public:
         return idx;
     }
         
-
+    /**
+     * Get an existing string by index.
+    */
 	std::string const& getString(size_t index)  {
     	return strings[index];
     }
 };
 
+/** Stores mappings from logical token names to string representations. */
 std::unordered_map<int, std::string> token_name_map;
 
 /**
+ * This is the token value passed into the Lemon parser. It always has a type, 
+ * but it might not always have a value. This is indicated by having a 
+ * nullptr `valueTable`.
+ * 
  * It seems Token must be a trivial value type to pass through
  * the lemon parser. This means we need to play tricks with
  * the value string.
@@ -129,24 +148,33 @@ struct Token {
     }
 };
 
+/** Convenience method to make a token. */
 Token make_token(int type, int line) {
     return Token {type, 0, nullptr, line};
 }
 
+/** Convenience method to make a token. */
 Token make_token(int type, StringTable & st, std::string const& s, int line) {
     return Token {type, st.pushString(s), &st, line};
 }
 
+/**
+ * This implements a prefix tree, used to match literals in the lexer.
+ * 
+*/
 template <typename V_T>
 struct PTNode {
-    char code;
-    std::optional<V_T> value;
-    std::optional<std::regex> terminatorPattern;
+    char code; ///< character contribution
+    std::optional<V_T> value; ///< the output token value if matched
+    std::optional<std::regex> terminatorPattern; ///< a regex used to check if the literal is properly terminated
 
     std::vector<PTNode> children;
 
     PTNode(char code, std::optional<V_T> const& value, std::optional<std::regex> const& terminator) : code(code), value(value), terminatorPattern(terminator), children() {}
 
+    /**
+     * Recursively add a literal to the tree.
+    */
     void add_value(std::string_view const& code, V_T const& value, std::optional<std::regex> const& terminator = std::nullopt) {
         if (code.length() == 0) {
             this->value = value;
@@ -165,6 +193,7 @@ struct PTNode {
         children.back().add_value(code.substr(1, code.length() - 1), value, terminator);
     }
 
+    /** Check the terminator pattern, or return true automatically if we don't have a terminator defined.  */
     bool tryTerminator(std::string::const_iterator const& first, std::string::const_iterator const& last) const {
         if (!terminatorPattern) return true;
 
@@ -172,6 +201,10 @@ struct PTNode {
     }
 
     using LexResult = std::tuple<V_T, std::string::const_iterator>;
+
+    /**
+     * Try to match the maximal string possible from the beginning of the input range.
+    */
     std::optional<LexResult> tryValue(std::string::const_iterator first, std::string::const_iterator last) const {
         //std::cout << "Checking " << std::string(first, last) << " against " << code << std::endl;
         if (children.empty() || first == last) { // reached end of input or end of chain while still matching.
@@ -195,6 +228,7 @@ struct PTNode {
     }
 };
 
+/** Convert a string into a case-insensitive regex. */
 std::regex s2regex(std::string const& s) {
     return std::regex(s, std::regex::icase | std::regex::ECMAScript);
 }
@@ -229,16 +263,20 @@ struct Lexer {
     }
 
     static std::vector<std::regex> skips;
+    static std::vector<std::tuple<std::regex, int>> valueTypes; ///< regex pattern, token code
+    static std::vector<std::tuple<char, char, int, bool>> stringDefs; ///< delim, escape, token code, span newlines
+
+    /** Add a skip pattern to the lexer definition. */
     static void add_skip(std::string const& r) {
         skips.push_back(s2regex(r));
     }
 
-    static std::vector<std::tuple<std::regex, int>> valueTypes;
+    /** Add a value pattern to the lexer definition. */
     static void add_value_type(int tok_code, std::string const& r) {
         valueTypes.push_back(std::make_tuple(s2regex(r), tok_code));
     }
 
-    static std::vector<std::tuple<char, char, int, bool>> stringDefs;
+    /** Add a string definition to the lexer definition. */
     static void add_string_def(char delim, char escape, int tok_code, bool spanNewlines) {
         stringDefs.push_back(std::make_tuple(delim, escape, tok_code, spanNewlines));
     }
@@ -246,19 +284,21 @@ struct Lexer {
     using siter = std::string::const_iterator;
     // == instance ==
 private:
-    std::string input;
-    std::string::const_iterator curPos;
-    StringTable &stringTable;
-    int count;
-    bool reachedEnd;
-    int line = 1;
+    std::string input; ///< the entire input string to lex
+    std::string::const_iterator curPos; ///< current authoritative position in the string
+    StringTable &stringTable; ///< reference to parser string table to use
+    int count; ///< count of tokens lexed
+    bool reachedEnd; ///< have we reached the end?
+    int line = 1; ///< what's our current line?
     
+    /** Make a runtime error with context info. */
     std::runtime_error make_error(std::string const& message) {
         char buf[1024];
         snprintf(buf, 1024, "Lexer failure on line %d. %s Around here:\n", line, message.c_str());
         return std::runtime_error(std::string(buf) + remainder(100));
     }
 
+    /** Advance curPos by the given count. */
     siter advanceBy(size_t count) {
         auto oldPos = curPos;
         std::advance(curPos, count);
@@ -266,6 +306,7 @@ private:
         return oldPos;
     }
 
+    /** Advance curPos to the given position. */
     siter advanceTo(siter const& newPos) {
         auto oldPos = curPos;
         curPos = newPos;
@@ -274,6 +315,7 @@ private:
         return oldPos;
     }
 
+    /** Count lines between iterators. */
     int countLines(siter from, siter const& to) {
         int lineCount = 0;
         for (; from != to; from++) {
@@ -284,6 +326,7 @@ private:
         return lineCount;
     }
 
+    /** Repeatedly apply skip patterns, consuming input if they match. */
     void skip() {
         bool skipped = false;
         do { 
@@ -298,6 +341,7 @@ private:
         } while (skipped);
     }
 
+    /** Find the end of the string from the start position. */
     siter stringEnd(char stringDelim, char escape, bool spanNewlines, siter stringStart, siter end) {
         for (; stringStart != end; ++stringStart) {
             if (*stringStart == escape) {
@@ -319,6 +363,7 @@ private:
         throw make_error("String lexing reached end of line.");
     }
 
+    /** Try all of the string definitions and attempt to get a string, returning nullopt if no string is possible. */
     std::optional<Token> nextString() {
         auto n = [this] (int tokCode, char delim, char escape, bool span) -> std::optional<Token> {
             if (tokCode && *curPos == delim) { // if we get past this, we're either going to return a string token or exception out.
@@ -342,6 +387,7 @@ private:
         return std::nullopt;
     }
 
+    /** Query the prefix tree to check for a literal token, returning nullopt if nothing matches. */
     std::optional<Token> nextLiteral() {
         auto result = literals.tryValue(curPos, input.cend());
         if (!result) return std::nullopt;
@@ -350,6 +396,7 @@ private:
         return make_token(std::get<0>(result.value()), line);
     }
 
+    /** Try all the value patterns to see if one matches, returning it if it does. Returns nullopt if nothing matches. */
     std::optional<Token> nextValue() {
         for (auto const& r : valueTypes) {
             std::smatch results;
@@ -369,8 +416,16 @@ private:
     }
 
 public:
+
+    /** Create a new lexer with the given input, using the given string table. */
     Lexer(std::string const& inputString, StringTable & stringTable) : input(inputString), curPos(input.cbegin()), stringTable(stringTable), count(0), reachedEnd(false) {}
 
+    /** 
+     * Get the next token. Returns a special EOF token (defined by Lemon) when it 
+     * reaches end of input, returns nullopt on the next call after emitting EOF.
+     * 
+     * @throw std::runtime_error if there's a error lexing.
+     * */
     std::optional<Token> next() {
         skip();
 
@@ -400,23 +455,29 @@ public:
         throw make_error("Cannot lex next character. Not part of any match.");
     };
 
+    /** Get the current line of the current lexer position. */
     int const& getLine() const { return line; }
 
+    /** Has the lexer consumed all input? */
     bool consumedInput() {
         return curPos == input.cend();
     }
 
+    /** Get a portion of the input after the current position, used for error reporting. */
     std::string remainder(size_t len = 0) {
         return std::string(curPos, len && (curPos + len < input.cend()) ? (curPos + len) : input.cend());
     }
 
+    /** Get a count of all tokens lexed. */
     int getCount() const {
         return count;
     }
 };
 
+/** Forward declaration of codegen'd lexer initialization function. Defined by the BuildLexer.py */
 void _init_lexer();
 
+// static storage for lexer.
 PTNode<int> Lexer::literals(0, std::nullopt, std::nullopt); // root node.
 decltype(Lexer::skips) Lexer::skips;
 decltype(Lexer::valueTypes) Lexer::valueTypes;
@@ -427,41 +488,79 @@ decltype(Lexer::stringDefs) Lexer::stringDefs;
 using ParseValue = std::variant<std::string, Token>;
 
 /**
+ * A parser-internal parse node.
+ * 
  * ParseNodes are handled by pointer within the parser.
 */
 struct ParseNode {
-    ParseValue value;
-    int64_t line;
-    std::vector<ParseNode*> children;
+    ParseValue value; ///< the production or token
+    int64_t line; ///< line for this node
+    std::vector<ParseNode*> children; ///< pointers to children
 
+    /** Add a node to the end of the children list. */
     ParseNode* push_back(ParseNode *n) { children.push_back(n); return this; }
 
+    /** Add a node to the beginning of the children list. Not typically recommended. */
+    ParseNode* push_front(ParseNode *n) { children.insert(children.begin(), n); return this; }
+
+    /** Add a node to the end of the children list. */
     ParseNode* pb(ParseNode *n) { return push_back(n); }
 
+    /** Add a node to the beginning of the children list. Not typically recommended. */
+    ParseNode* pf(ParseNode *n) { return push_front(n); }
+
+    /** Set the line number of this node. */
     ParseNode* l(int64_t line) { this->line = line; return this; }
 };
 
 /**
- * Parser state, passed to the grammar actions.
+ * Implements the parser and all state for a parser run.
 */
-struct Parser {
-    void* lemonParser;
-    std::unordered_map<ParseNode*, std::unique_ptr<ParseNode>> allNodes;
-    StringTable stringTable;
-    Token currentToken;
+class Parser {
+    void* lemonParser; ///< opaque poiner to lemon parser
 
-    ParseNode *root = nullptr;
-    bool successful = false;
+    std::unordered_map<ParseNode*, std::unique_ptr<ParseNode>> allNodes; ///< storage for nodes
+    StringTable stringTable; ///< string storage
+    Token currentToken; ///< the last token passed from the lexer for parsing 
 
+    ParseNode *root = nullptr; ///< root node for the parse tree
+    bool successful = false; ///< have we received the successful message from the parser
+
+    /**
+     * Reset the parser state. Called internally by `parseString()`, so not necessary to call manually.
+    */
+    void reset() {
+        allNodes.clear();
+        stringTable.clear();
+
+        currentToken = make_token(0, -1);
+        root = nullptr;
+        successful = false;
+    }
+
+    /**
+     * Pass the next token into the lemon parser.
+    */
+    void offerToken(Token token) {
+        currentToken = token;
+	    LemonPyParse(lemonParser, token.type, token, this);
+    }
+
+public:
+
+    /** Create a new parser, allocating lemon parser state. */
     Parser() : lemonParser(LemonPyParseAlloc(malloc)), allNodes(), stringTable() {
         _init_lexer();
     }
 
+    /** Deallocate lemon parser state. */
     ~Parser() {
         LemonPyParseFree(lemonParser, free);
     }
 
     using ChildrenPack = std::initializer_list<ParseNode*>;
+
+    /** Make a new node. */
     ParseNode* make_node(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1) {
         auto node = std::make_unique<ParseNode>();
         node->value = value;
@@ -480,10 +579,22 @@ struct Parser {
         return retval;
     }
 
+    /** Short for make_node. */
     ParseNode* mn(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1) {
         return make_node(value, children, line);
     }
+    
+    /**
+     * Set the root node of the parse tree.
+    */
+    ParseNode* push_root(ParseNode *pn) {
+        return root = pn;
+    }
 
+    /** 
+     * Drop the given node from internal storage. Not strictly necessary, but can keep interim
+     * memory usage lower.
+     */
     void drop_node(ParseNode *pn) {
         auto it = allNodes.find(pn);
         if (it != allNodes.end()) {
@@ -491,21 +602,39 @@ struct Parser {
         }
     }
 
-    void offerToken(Token token) {
-        currentToken = token;
-	    LemonPyParse(lemonParser, token.type, token, this);
-    }
-
+    /**
+     * Used by the lemon parser to signal a parse error.
+    */
     void error() {
         throw std::runtime_error("Parse error on token: " + currentToken.toString());
     }
 
+    /**
+     * Used by the lemon parser to signal a parse success.
+    */
 	void success() {
         successful = true;
     }
 
-    ParseNode* push_root(ParseNode *pn) {
-        return root = pn;
+    /**
+     * Parse the given input string, returning a parse tree on success.
+     * 
+     * @throw std::runtime_error on lex or parse error.
+    */
+    ParseNode* parseString(std::string const& input) {
+        reset();
+
+        Lexer lexer(input, stringTable);
+
+        while (auto tok = lexer.next()) {
+            offerToken(tok.value());
+        }
+
+        if (!(successful && root)) {
+            throw std::runtime_error("Lexer reached end of input without parser completing and setting root node.");
+        }
+
+        return root;
     }
 };
 
@@ -515,6 +644,8 @@ struct Parser {
 
 namespace parser {
 
+#ifndef LEMON_PY_SUPPRESS_PYTHON
+/** Get a string value or None. */
 py::object string_or_none(std::optional<std::string> const& v) {
     if (!v) {
         //return py::cast<py::none>(Py_None);
@@ -524,7 +655,16 @@ py::object string_or_none(std::optional<std::string> const& v) {
         return py::cast<py::str>(PyUnicode_FromStringAndSize(v.value().data(), v.value().length()));
     }
 }
+#endif
 
+#ifdef LEMON_PY_SUPPRESS_PYTHON
+    /** Stubs out the `dict` definition when python is suppressed. */
+    namespace py { using dict = void*; }
+#endif
+
+/**
+ * Sanitize a string for dot.
+*/
 std::string sanitize(std::string in) {
     auto clean = [&in] (char c, const char* replace) {
         size_t res = 0;
@@ -543,14 +683,17 @@ std::string sanitize(std::string in) {
     return std::move(in);
 }
 
+/**
+ * A value-typed parse node (in contrast to the indirect, pointer-based parse tree above).
+*/
 struct ParseNode {
-    std::optional<std::string> production;
-    std::optional<std::string> tokName;
-    std::optional<std::string> value;
-    int64_t line;
-    std::vector<ParseNode> children;
-    int id;
-    py::dict attr;
+    std::optional<std::string> production; ///< the production name, if an internal node
+    std::optional<std::string> tokName; ///< the token name, if a terminal node
+    std::optional<std::string> value; ///< the token value, if a value token
+    int64_t line; ///< line number for this node. -1 if unknown.
+    std::vector<ParseNode> children; ///< all the children of this parse node
+    int id; ///< id number, unique within a single tree
+    py::dict attr; ///< if python is enabled, this is a dictionary to contain attributes added by a python transformer
 
     ParseNode() : production(), tokName(), value(), line(-1), children(), id(-1), attr() {}
     ParseNode(ParseNode && o) : production(std::move(o.production)), tokName(std::move(o.tokName)), value(std::move(o.value)), line(o.line), children(std::move(o.children)), id(o.id), attr(std::move(o.attr)) {
@@ -571,9 +714,10 @@ struct ParseNode {
         return *this;
     }
 
-#ifndef LEMON_PY_SUPPRESS_PYTHON
-    ParseNode(ParseNode const&) = default;
+    ParseNode(ParseNode const&) = default; // we're values all the way down, so this is fine.
     ParseNode& operator=(ParseNode const&) = default;
+
+#ifndef LEMON_PY_SUPPRESS_PYTHON
 
     py::object getProduction() const {
         return string_or_none(production);
@@ -588,6 +732,9 @@ struct ParseNode {
     }
 #endif
 
+    /**
+     * Return a halfway reasonable string representation of the node (but not its children).
+    */
     std::string toString() {
         char outbuf[1024]; // just do the first 1k characters
         if (production) {
@@ -600,6 +747,9 @@ struct ParseNode {
         return std::string(outbuf);
     }
 
+    /**
+     * Add this node and its children to the dot graph being built up in `out`.
+    */
     void dotify(std::stringstream & out, const ParseNode * parent) const {
         char buf[1024];
 
@@ -622,6 +772,9 @@ struct ParseNode {
     }
 };
 
+/**
+ * Create a complete dot graph, rooted at the given ParseNode.
+*/
 std::string dotify(ParseNode const& pn) {
     std::stringstream out;
 
@@ -635,6 +788,10 @@ std::string dotify(ParseNode const& pn) {
     return out.str();
 }
 
+/**
+ * Uplift a node from the internal poiner-based representation into the 
+ * external value-semantics representation.
+*/
 ParseNode uplift_node(_parser_impl::ParseNode* alien, int & idCounter) {
     ParseNode retval;
     retval.id = idCounter++;
@@ -658,25 +815,24 @@ ParseNode uplift_node(_parser_impl::ParseNode* alien, int & idCounter) {
     return std::move(retval);
 }
 
+/**
+ * Uplift a node from the internal poiner-based representation into the 
+ * external value-semantics representation.
+*/
 ParseNode uplift_node(_parser_impl::ParseNode* alien) {
     int idCounter = 0;
     return uplift_node(alien, idCounter);
 }
 
+/**
+ * Parse a string and return a value-semantics parse node.
+ * 
+ * @throw std::runtime_error if there is a lex or parse error.
+*/
 ParseNode parse_string(std::string const& input) {
     using namespace _parser_impl;
     Parser p;
-    Lexer lexer(input, p.stringTable);
-
-    while (auto tok = lexer.next()) {
-         p.offerToken(tok.value());
-    }
-
-    if (!(p.successful && p.root)) {
-        throw std::runtime_error("Lexer reached end of input without parser completing and setting root node.");
-    }
-
-    return uplift_node(p.root);
+    return uplift_node(p.parseString(input));
 }
 
 }
