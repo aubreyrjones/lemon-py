@@ -101,7 +101,7 @@ import expr_parse
 import json
 expression = expr_parse.parse('(5 + 7.2) / log(-24) + "nonsense"')
 print(json.dumps(expression.as_dict(), indent=1))
-with open('out.dot') as f: # render with `$ dot -Tpng -oparse_tree.png out.dot`
+with open('out.dot', 'w') as f: # render with `$ dot -Tpng -oparse_tree.png out.dot`
      f.write(expr_parse.dotify(expression))
 ```
 
