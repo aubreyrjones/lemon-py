@@ -70,13 +70,13 @@ protected:
 
 	typedef std::unordered_map<std::string, size_t> PrevMap;
 
-	PrevMap previousLocations;
+	PrevMap cachedLocations;
 
 public:
 
     /** Clear table state. */
     void clear() {
-        previousLocations.clear();
+        cachedLocations.clear();
         strings.clear();
     }
 
@@ -84,13 +84,13 @@ public:
      * Push a string and return the index.
     */
 	size_t pushString(std::string const& s) {
-        PrevMap::iterator it = previousLocations.find(s);
-        if (it != previousLocations.end()){
+        PrevMap::iterator it = cachedLocations.find(s);
+        if (it != cachedLocations.end()){
             return (*it).second;
         }
 
         size_t idx = strings.size();
-        previousLocations.emplace(s, idx);
+        cachedLocations.emplace(s, idx);
 
         strings.push_back(s);
 
@@ -341,7 +341,7 @@ private:
         } while (skipped);
     }
 
-    /** Find the end of the string from the start position. */
+    /** Find the end of the string from the given start position. */
     siter stringEnd(char stringDelim, char escape, bool spanNewlines, siter stringStart, siter end) {
         for (; stringStart != end; ++stringStart) {
             if (*stringStart == escape) {
@@ -368,7 +368,7 @@ private:
         auto n = [this] (int tokCode, char delim, char escape, bool span) -> std::optional<Token> {
             if (tokCode && *curPos == delim) { // if we get past this, we're either going to return a string token or exception out.
                 auto send = stringEnd(delim, escape, span, curPos + 1, input.cend());
-                auto sstart = advanceTo(send + 1);
+                auto sstart = advanceTo(send + 1); // move past the end delim
                 return make_token(tokCode, stringTable, std::string(sstart + 1, send), line);
             }
             else { 
@@ -430,11 +430,11 @@ public:
         skip();
 
         if (consumedInput()) {
-            if (reachedEnd) {
+            if (reachedEnd) { // second time we return nullopt so we can stop operating
                 return std::nullopt;
             }
             else {
-                reachedEnd = true;
+                reachedEnd = true; // first time, we emit the EOF token
                 return make_token(0, line);
             }
         }
@@ -835,7 +835,7 @@ ParseNode parse_string(std::string const& input) {
     return uplift_node(p.parseString(input));
 }
 
-}
+} // namespace parser
 
 #ifndef LEMON_PY_SUPPRESS_PYTHON
 PYBIND11_MODULE(PYTHON_PARSER_MODULE_NAME, m) {
