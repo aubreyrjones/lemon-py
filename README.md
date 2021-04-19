@@ -17,7 +17,7 @@ by string as well--no type conversions are applied inside of the
 parser module.
 
 lemon-py grammar files are essentially just regular [lemon grammar
-files](lemon/lemon.md) but
+files](lemon/lemon.html) but
 include an extension to support automatic lexer generation, and a
 standardized C++ parse node implementation to build the returned parse
 tree. The input file is transformed, lexer definitions extracted, and
