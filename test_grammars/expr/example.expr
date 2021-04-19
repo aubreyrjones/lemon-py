@@ -1,8 +1,11 @@
 // a comment
-5 
-* 
-3.2 
-+ "a string" < "INTE\"RRU'PTED\\" *
+-5 
++ 
+3.2
++
+"a line-
+spanning
+string" < "INTE\"RRU'PTED\\" *
  (3 + 'some" \'chars') / a_variable 
  // another comment
  + function_call (a + x, b / y + x, 

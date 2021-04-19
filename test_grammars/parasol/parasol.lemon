@@ -13,9 +13,9 @@ ELSE           :=  else        : [^\w_\?]
 DEF            :=  def         : [^\w_\?]
 AS             :=  as          : [^\w_\?]
 LET            :=  let         : [^\w_\?]
+
 L_CURLY        :=  {
 R_CURLY        :=  }
-
 GOESTO         :=  =>
 LAMBDA         :=  \
 COMMA          :=  ,
@@ -36,7 +36,7 @@ MULT           :=  *
 DIV            :=  /
 DOT            :=  *.
 SWIZZLE        :=  .
-SEQUENCE       := ..
+SEQUENCE       :=  ..
 NOT            :=  !
 R_BRACKET      :=  ]
 COLON          :=  :

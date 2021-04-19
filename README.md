@@ -289,16 +289,15 @@ delimeter character, escape character, and token code are
 configurable. A string lexer definition is declared by starting the
 line with the `'` (single-quote) character. The next character is the
 string delimeter, and the subsequent character is the escape
-character. All whitespace is ignored, including between the delimeter
-and escape characters. Strings delimited by the given character are
-then assigned the token type appearing to the right of the `:=` on the
-line.
+character. Finally, the special character `!` may appear as a third
+character, indicating that the string lexer should not treat reaching
+end of line before the end delimeter as an error. All whitespace in
+the definition is ignored, including between the delimeter and escape
+characters. Strings delimited by the given character are then assigned
+the token type appearing to the right of the `:=` on the line.
 
 Notes: Due to lazy lexdef parsing, you can't define a string with a
-colon as a delimiter or escape. Strings are also completely unaware of
-newline characters and will continue right along until they reach
-their closing delimeter (the start of a new string?) or the end of
-input.
+colon as a delimiter or escape.
 
 String syntax examples:
 
@@ -306,9 +305,14 @@ String syntax examples:
   `STR_TOK`, and use the backslash as an escape character. (This is
   mostly like normal C-style strings.)
 
-* `' @; := DOC` - assign at-sign delimeted strings to `DOC`, and use
-  the semi-colon as an escape character. Something like `@look ;@ me
-  over here;;@`.
+* `' @;! := DOC` - assign at-sign delimeted strings to `DOC`, use the
+  semi-colon as an escape character, and freely pass over the newline
+  character. Something like:
+
+```
+@look ;@ me 
+over;;here@
+```
 
 Token classes are tested in the following order:
 
@@ -320,7 +324,7 @@ Token classes are tested in the following order:
 Skips are applied repeatedly, before checking for the next lexical
 token, until no skip consumes input.
 
-Fairly simple, if semantically-incomplete, lexdef:
+Example lexdef:
 
 ```
 /*
@@ -329,25 +333,26 @@ Fairly simple, if semantically-incomplete, lexdef:
 @lexdef
 
 !whitespace : \s
-!comment : //.*\n
+!comment    : //.*\n
 
-ADD := +
-SUB := -
-MUL := *
-DIV := /
-L_PAREN := (
-R_PAREN := )
-COMMA := ,
-EQ := ==
-GETS := =
+ADD       := +
+SUB       := -
+MUL       := *
+DIV       := /
+L_PAREN   := (
+R_PAREN   := )
+COMMA     := ,
+EQ        := ==
+GETS      := =
+LAMBDA    := lambda  : [^\w]
 
 FLOAT_LIT : [0-9]+\.[0-9]+
-INT_LIT : [0-9]+
-FNCALL : ([_a-z][_a-z0-9]*)\s*\( 
-IDENT : [_a-z][_a-z0-9]*
+INT_LIT   : [0-9]+
+FNCALL    : ([_a-z][_a-z0-9]*)\s*\( 
+IDENT     : [_a-z][_a-z0-9]*
 
-' '\ := CHAR
-' "\ := STRING
+' '\  := CHAR
+' "\! := STRING
 
 @endlex
 */

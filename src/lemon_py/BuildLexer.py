@@ -42,8 +42,10 @@ LEXER_END = \
 def escape_backslash(s: str, extra: str = '"'):
     return s.replace('\\', '\\\\').replace(extra, '\\' + extra)
 
+
 def split_lex_line(l: str) -> Optional[Tuple[str, str]]:
     pass # should probably implement and switch to this
+
 
 def extract_lexer_def(lemon_source: str) -> List[Tuple[str, str]]:
     start = lemon_source.find('@lexdef')
@@ -72,13 +74,15 @@ def implement_literal(token, litval):
 def implement_regex(token, re_str):
     return f"_parser_impl::Lexer::add_value_type({token}, \"{escape_backslash(re_str)}\");\n" + map_token_name(token)
 
+
 def implement_stringdef(delim_spam: str, token):
     # delim_spam looks like: '   "\ 
-    # whole line looks like maybe: '  @ ^ :=  SOME_TOK
+    # whole line looks like maybe: '  @ ^ ! :=  SOME_TOK
     delim_spam = re.sub('\s+', '', delim_spam[1:])
     delim = escape_backslash(delim_spam[0], "'")
     escape = escape_backslash(delim_spam[1], "'")
-    impl = f"_parser_impl::Lexer::add_string_def('{delim}', '{escape}', {token});\n"
+    shouldSpan = "true" if len(delim_spam) > 2 and delim_spam[2] == '!' else "false"
+    impl = f"_parser_impl::Lexer::add_string_def('{delim}', '{escape}', {token}, {shouldSpan});\n"
     return impl + map_token_name(token)
 
 

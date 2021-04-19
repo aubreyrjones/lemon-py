@@ -238,9 +238,9 @@ struct Lexer {
         valueTypes.push_back(std::make_tuple(s2regex(r), tok_code));
     }
 
-    static std::vector<std::tuple<char, char, int>> stringDefs;
-    static void add_string_def(char delim, char escape, int tok_code) {
-        stringDefs.push_back(std::make_tuple(delim, escape, tok_code));
+    static std::vector<std::tuple<char, char, int, bool>> stringDefs;
+    static void add_string_def(char delim, char escape, int tok_code, bool spanNewlines) {
+        stringDefs.push_back(std::make_tuple(delim, escape, tok_code, spanNewlines));
     }
 
     using siter = std::string::const_iterator;
@@ -253,6 +253,11 @@ private:
     bool reachedEnd;
     int line = 1;
     
+    std::runtime_error make_error(std::string const& message) {
+        char buf[1024];
+        snprintf(buf, 1024, "Lexer failure on line %d. %s Around here:\n", line, message.c_str());
+        return std::runtime_error(std::string(buf) + remainder(100));
+    }
 
     siter advanceBy(size_t count) {
         auto oldPos = curPos;
@@ -293,27 +298,31 @@ private:
         } while (skipped);
     }
 
-    siter stringEnd(char stringDelim, char escape, siter stringStart, siter end) {
+    siter stringEnd(char stringDelim, char escape, bool spanNewlines, siter stringStart, siter end) {
         for (; stringStart != end; ++stringStart) {
             if (*stringStart == escape) {
                 auto nextChar = stringStart + 1;
-                if (nextChar == end) throw std::runtime_error("Lexer error: string lexing reached end of input.");
-                if (*nextChar == stringDelim || *nextChar == escape) {
+                if (nextChar == end) goto end_of_input;
+                if ((*nextChar == stringDelim) || (*nextChar == escape)) {
                     stringStart++; // skip past this delim, the loop will skip the escaped char
                 }
+            }
+            else if (!spanNewlines && (*stringStart == '\n')) {
+                throw make_error("Non-spanning string crossed newline.");
             }
             else if (*stringStart == stringDelim) {
                 return stringStart;
             }
         }
 
-        throw std::runtime_error("Lexer error: string lexing reached end of input.");
+        end_of_input:
+        throw make_error("String lexing reached end of line.");
     }
 
     std::optional<Token> nextString() {
-        auto n = [this] (int tokCode, char delim, char escape) -> std::optional<Token> {
+        auto n = [this] (int tokCode, char delim, char escape, bool span) -> std::optional<Token> {
             if (tokCode && *curPos == delim) { // if we get past this, we're either going to return a string token or exception out.
-                auto send = stringEnd(delim, escape, curPos + 1, input.cend());
+                auto send = stringEnd(delim, escape, span, curPos + 1, input.cend());
                 auto sstart = advanceTo(send + 1);
                 return make_token(tokCode, stringTable, std::string(sstart + 1, send), line);
             }
@@ -325,7 +334,7 @@ private:
         using std::get;
 
         for (auto const& sdef : stringDefs) {
-            if (auto matchedString = n(get<2>(sdef), get<0>(sdef), get<1>(sdef))) {
+            if (auto matchedString = n(get<2>(sdef), get<0>(sdef), get<1>(sdef), get<3>(sdef))) {
                 return matchedString;
             }
         }
@@ -388,7 +397,7 @@ public:
             return value;
         }
 
-        return std::nullopt;
+        throw make_error("Cannot lex next character. Not part of any match.");
     };
 
     int const& getLine() const { return line; }
@@ -442,6 +451,7 @@ struct Parser {
     Token currentToken;
 
     ParseNode *root = nullptr;
+    bool successful = false;
 
     Parser() : lemonParser(LemonPyParseAlloc(malloc)), allNodes(), stringTable() {
         _init_lexer();
@@ -491,7 +501,7 @@ struct Parser {
     }
 
 	void success() {
-        //nop
+        successful = true;
     }
 
     ParseNode* push_root(ParseNode *pn) {
@@ -662,17 +672,11 @@ ParseNode parse_string(std::string const& input) {
          p.offerToken(tok.value());
     }
 
-    if (!lexer.consumedInput()) {
-        char buf[1024];
-        snprintf(buf, 1024, "Lexer failure on line %d. Around here:\n", lexer.getLine());
-        throw std::runtime_error(std::string(buf) + lexer.remainder(100));
+    if (!(p.successful && p.root)) {
+        throw std::runtime_error("Lexer reached end of input without parser completing and setting root node.");
     }
 
-    if (p.root) { // successful parse.
-        return uplift_node(p.root);
-    }
-
-    return ParseNode();
+    return uplift_node(p.root);
 }
 
 }
