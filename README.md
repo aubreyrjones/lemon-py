@@ -5,32 +5,114 @@ This project wraps the Lemon parser generator. If you aren't sure what
 a parser generator is, this is maybe not something you need.
 
 lemon-py provides functions that compile a EBNF grammar and a lexer
-definition into a standalone native/extension module for Python 3.x or
-C++ high-level lexer+parser definition. The resulting parser has no
-external dependencies (including on this project) and is suitable for
-use as a submodule in other projects. This project _itself_ has
-several dependencies, including a standard GNU native build chain.
+definition into a standalone native module for Python 3.x or C++ (with
+a little work). The resulting lexer+parser is implemented entirely in
+native code, and has no external dependencies (including on this
+project or any Python code) and is suitable for use as a submodule in
+other projects.  You can just `import` it and run `parse()`.
 
 lemon-py parsers output a uniformly-typed parse tree. All productions
 are identified by a string name, and all terminal values are returned
 by string as well--no type conversions are applied inside of the
-parser module. The return parsed tree has several convenience
-operations defined on it, including GraphViz `dot` graphical
-visualization of parse trees, which ease early-stage language
-development.
+parser module. The returned parse tree has a convenient interface in
+both Python and modern C++, with the details of Lemon's proud legacy
+hidden away safely. One standout feature, available in both Python and
+C++, is (dependency-free) GraphViz `dot` output for graphical
+visualization of parse trees--essential for language development.
+
+lemon-py extends the Lemon parser generator with a built-in,
+configurable lexer. The lexer handles commonly-encountered token types
+such as constant/literal character strings, case-insensitive regular
+expressions with captured value, and strings with user-defined
+delimiter and escape characters. The lexer also supports user-defined
+"skip" patterns for omitting lexically-irrelevant characters. The
+lexer is not especially performant, but is implemented in an
+easily-extensible manner, allowing for easy expansion and
+customization.
 
 lemon-py grammar files are essentially just regular [lemon grammar
-files](lemon/lemon.html) but
-include an extension to support automatic lexer generation, and a
-standardized C++ parse node implementation to build the returned parse
-tree. The input file is transformed, lexer definitions extracted, and
-then output as a pybind11-based C++ Python extension. This extension
-is built and installed in your local sitepath as a python module that
-you can just `import`.
+files](lemon/lemon.html) but include an extension to support automatic
+lexer generation. 
+
+
+A lexer and grammar definition for lemon py.
+```
+/*
+@pymod expr_parse
+
+@lexdef
+!whitespace : \s
+!comment : //.*\n
+
+' ' \   := CHAR
+' " \ ! := STRING
+
+ADD := +
+SUB := -
+MUL := *
+DIV := /
+L_PAREN := (
+R_PAREN := )
+COMMA := ,
+
+FLOAT_LIT : [0-9]+\.[0-9]+
+INT_LIT : [0-9]+
+FNCALL : ([_a-z][_a-z0-9]*)\s*\(
+IDENT : [_a-z][_a-z0-9]*
+@endlex
+*/
+
+// token association, and implicit (ascending) priority
+%left COMMA FNCALL.
+%left ADD SUB.
+%left MUL DIV.
+
+toplevel ::= expr(c1).                            { p->push_root(p->mn("root", {c1}, c1->line)); }
+
+expr(e) ::= expr(c1) ADD(o) expr(c2).             { e = p->mn("+", {c1, c2}, o.line); }
+expr(e) ::= expr(c1) SUB(o) expr(c2).             { e = p->mn("-", {c1, c2}, o.line); }
+expr(e) ::= expr(c1) MUL(o) expr(c2).             { e = p->mn("*", {c1, c2}, o.line); }
+expr(e) ::= expr(c1) DIV(o) expr(c2).             { e = p->mn("/", {c1, c2}, o.line); }
+expr(e) ::= SUB expr(c1). [MUL]                   { e = p->mn("neg", {c1}, c1->line); }
+expr(e) ::= L_PAREN expr(e1) R_PAREN.             { e = e1; }
+
+expr(e) ::= varref(e1).                           { e = e1; }
+varref(e) ::= IDENT(lit).                         { e = p->mn("varref", {p->mn(lit)}, lit.line); }
+
+expr(e) ::= fncall(e1).                           { e = e1; }
+fncall(e) ::= FNCALL(lit1) arg_list(c2) R_PAREN.  { e = p->mn("fncall", {p->mn(lit1), c2}, lit1.line); }
+
+arg_list(L) ::= .                                 { L = p->mn("arglist"); }
+arg_list(L) ::= expr(c1).                         { L = p->mn("arglist", {c1}, c1->line); }
+arg_list(L) ::= arg_list(L1) COMMA expr(e).       { L1->pb(e); L = L1; }
+
+expr(e) ::= FLOAT_LIT(lit).                       { e = p->mn(lit); }
+expr(e) ::= INT_LIT(lit).                         { e = p->mn(lit); }
+
+expr(e) ::= CHAR(lit).                            { e = p->mn(lit); }
+expr(e) ::= STRING(lit).                          { e = p->mn(lit); }
+```
+
+Which is compiled and installed like: `lempy_build expressions.lemon`.
+
+Which can be used from Python like:
+```
+import expr_parse
+import json
+expression = expr_parse.parse('(5 + 7.2) / log(-24) + "nonsense"')
+print(json.dumps(expression.as_dict(), indent=1))
+with open('out.dot') as f: # render with `$ dot -Tpng -oparse_tree.png out.dot`
+     f.write(expr_parse.dotify(expression))
+```
 
 
 Prereqs
 -------
+
+While the generated parser modules have no dependencies, this project
+_itself_ has several.
+
+Only unix-like operating systems are supported right now.
 
 Python 3.6+ required.
 
@@ -39,7 +121,7 @@ on the `pybind11` PyPi module (not just headers installed to system
 include paths), and probably the `python3-dev` system package to get
 the `Python.h` header. Only standard C/C++ headers are used otherwise.
 
-Start by building lemon with `make` in the root directory. If you
+Start by building `lemon` with `make` in the root directory. If you
 don't do this, later commands will fail in mysterious and bizarre
 ways.
 
@@ -223,13 +305,12 @@ language. For the purposes of this (and only this) section, words like
 lexer->parser interface used inside of grammar production
 rules.
 
-Lexer definitions appear inside a comment block as a contiguous run of
+Lexer definitions appear inside a comment block as a run of
 `token : pattern` definitions, one per line, starting on the line
 following `@lexdef` and continuing until `@endlex`. Note that these
 definition lines are _not_ removed from the grammar input to `lemon`,
-and so should always be inside a comment block. It's an error,
-resulting in mysterious downstream problems, to define multiple
-`@lexdef` blocks. Do it once; do it right.
+and so should always be inside a comment block. It's an error to
+define multiple `@lexdef` blocks, and only the first one will be used.
 
 Use `lemon_py.BuildGrammar --terminals` to output a skeleton lexer
 definition. This is derived from the header file declaring token codes
@@ -243,25 +324,29 @@ string support. Declarations of different classes may be mixed in the
 `@lexdef` block, and the ordering rules discussed below apply only to
 the relative definition of different tokens of the _same class_.
 
-"literal" tokens are defined by a fixed string of characters, and are
-stored/matched with a basic prefix tree. Literals are matched
-greedily, with the longest matching sequence having priority. Thus the
-order in which you define overlapping literals is largely irrelevant
-(although definition order will influence search order between
-disjoint literals). Literal tokens are returned by Lemon-defined code
-number, without an additional text value.
+"literal" tokens are defined by a fixed string of
+case-sensitive/exactly-matched characters, and are stored/matched with
+a basic prefix tree. Literals are matched greedily, with the longest
+matching sequence having priority. Thus the order in which you define
+overlapping literals is largely irrelevant (although definition order
+will influence search order between disjoint literals). Literal tokens
+are returned by Lemon-defined code number, without an additional text
+value.
 
 NOTE: leading/trailing whitespace is _not_ preserved on the right side
-of the definition. The definition string is subjected to `str.strip()`
-prior to codegen.
+of the definition, although internal whitespace is preserved. The
+definition string is subjected to `str.strip()` prior to codegen.
 
 * Literal syntax: `TOKEN := literal_string`.
 
 Literal tokens have a higher priority than value tokens below, and so
 may erroneously consume the prefix of a value token. For instance,
 defining a literal matching `else` would consume the first part of a
-variable named `elsewhere`, generating a mis-parse or parse error. To
-solve this problem, literals may optionally be declared with a
+variable named `elsewhere`, generating a mis-parse or parse
+error. Reprioritizing values higher than literals would result in
+`else` lexing as an identifier in the above example.
+
+To solve this problem, literals may optionally be declared with a
 terminator pattern. The pattern is a regular expression which _must
 match_ the input after the literal string in order for the literal to
 match. The terminator characters themselves are _not consumed_ as
@@ -278,18 +363,17 @@ spaces.
  
 "value" tokens are defined by a regular expression, and are returned
 with both a token code and a text value. A single sub-match may be
-specified, and if present will be used to extract the submatch as the
+specified, and if present will be used to extract the sub-match as the
 token's value. No type conversions are applied, all values are
 returned as strings.
 
-Value token patterns are checked in the same order they are defined
-with `add_value_type`, which is the same order they're specified in
-the `@lexdef` block. Typically this means you should specify longer,
-more specific patterns first; and then shorter, or more generic
-patterns after. For instance, to keep your `INT_LITERAL` from always
-eating the first part of a `FLOAT_LITERAL` (resulting in subsequent
-lex or parse errors), define the floating-point literal (with
-mandatory decimal point) _before_ the integer literal.
+Value token patterns are checked in the same order they're specified
+in the `@lexdef` block. Typically this means you should specify
+longer, more specific patterns first; and then shorter, or more
+generic patterns after. For instance, to keep your `INT_LITERAL` from
+always eating the first part of a `FLOAT_LITERAL` (resulting in
+subsequent lex or parse errors), define the floating-point literal
+(with mandatory decimal point) _before_ the integer literal.
 
 NOTE: All regular expressions are currently matched *without* case
 sensitivity.
@@ -313,12 +397,20 @@ delimeter character, escape character, and token code are
 configurable. A string lexer definition is declared by starting the
 line with the `'` (single-quote) character. The next character is the
 string delimeter, and the subsequent character is the escape
-character. Finally, the special character `!` may appear as a third
-character, indicating that the string lexer should not treat reaching
-end of line before the end delimeter as an error. All whitespace in
-the definition is ignored, including between the delimeter and escape
-characters. Strings delimited by the given character are then assigned
-the token type appearing to the right of the `:=` on the line.
+character.
+
+Finally, the special character `!` may appear as a third character,
+indicating that the string lexer should not treat reaching end of line
+before the end delimeter as an error. If the `!` is not specified, the
+lexer will automatically consider it an error for a string to cross a
+newline boundary--this is often desirable as it makes locating
+target-language syntax errors much easier.
+
+All whitespace in the delimiter definition is ignored, including
+between the delimeter and escape characters.
+
+Strings delimited by the given character are assigned the token code
+appearing to the right of the `:=` on the line.
 
 String values returned by the lexer _do not_ include the surrounding
 delimters.
@@ -389,6 +481,67 @@ IDENT     : [_a-z][_a-z0-9]*
 Parser Definition
 -----------------
 
+The original Lemon parser-definition language is unchanged. Instead, a
+standard set of headers is included providing definitions available
+for use inside the parser actions. These definitions make it
+relatively trivial to generate generic parse trees to represent
+anything Lemon can parse.
+
+A variable `_parser_impl::Parser *p` is available in every parser
+action. This forms the handle to most of the interface. Call the
+functions below like `p->mn(...)`.
+
+_You may ignore memory management for nodes created using the `p->`
+interfaces_. All of these nodes are tracked by the internal `Parser`
+state, and any that go astray will be automatically freed when the
+parser completes or fails. This is one of the motivating features for
+this project, so please abuse it merily and report leaking `ParseNode`
+on github.
+
+You're on your own to manage memory for your own objects you create in
+grammar actions. lemon-py defines a `%default_destructor` for the
+Lemon grammar, but due to the tracked node pointers discussed above,
+these are ultimately unnecessary for normal-sized inputs, serving only
+to reduce interim memory usage and not to avoid memory leaks.  As a
+result, you may use the occasional per-rule `%destructor` if you wish.
+
+Available functions are as follows:
+
+* `ParseNode* p->push_root(ParseNode *root)`
+* `ParseNode* p->(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1)`
+* `ParseNode* node->pb(ParseNode *child)`
+* `ParseNode* node->l(int)`
+
+`push_root()` sets the overall result for the Parser parse operation. If
+you don't `push_root` some node (usually in the top level rule), no
+results will be generated from parsing. Returns the newly-set root
+node.
+
+`mn()` stands for `make_node`, and creates a new ParseNode. You can
+pass in either a Token or a string production name for the first
+value; an initializer list of `ParseNode*` children for the second
+argument; and a line number to associate with the node. If you pass a
+Token for the first argument, the line is automatically filled in for
+you; for non-terminal productions, you'll need to assign the node its
+line manually. This is the workhorse of the API. Returns the
+newly-created node.
+
+`pb()` stands for `push_back` and adds a child to right of a node's
+existing children. Note that this function is defined on the
+`ParseNode`, not on the `Parser`, and so is called with some
+Lemon-aliased or newly-constructed node and not with `p->`. Returns
+the _containing_ (not child) node.
+
+`l()` is also defined on the node, and sets the line number. The line
+number of an existing node is stored in the `.line` field.
+
+Tokens `.type` and `.line` fields, and you can retrieve strings
+representing the name and value with `.name()` and `.value()`
+respectively. However, the internal fields of the token are usually
+superfluous within a grammar construction. Typically, you can just
+pass the whole `Token` object (identified by Lemon metavariable) as
+the sole argument to `p->mn()` to create a terminal node.
+
 Check out the examples for a better idea of how to use this
 stuff. It's not especially intuitive if you've never used a parser
 generator before, and teaching you to use one is beyond the scope of
@@ -405,42 +558,6 @@ parser (by id with trailing `(` and `[` respectively), thereby
 avoiding ambiguities around function argument lists inside expression
 trees.
 
-The actual Lemon parser-definition language is unchanged, as the
-`lemon` source code and `lempar.c` template are completely unchanged
-from the sqlite release. Instead, a standard set of headers is
-included providing definitions available for use inside the parser
-actions. These definitions make it relatively trivial to generate
-generic parse trees to represent anything Lemon can parse.
-
-A variable `_parser_impl::Parser *p` is available in every parser
-action. This forms the handle to most of the interface. Call the
-functions below like `p->mn(...)`.
-
-Available functions are as follows:
-
-* `ParseNode* Parser::push_root(ParseNode *root)`
-* `ParseNode* Parser::mn(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1)`
-* `ParseNode* ParseNode::pb(ParseNode *child)`
-
-`push_root` sets the overall result for the Parser parse operation. If
-you don't `push_root` some node (usually in the top level rule), no
-results will be generated from parsing. Returns the newly-set root
-node.
-
-`mn` stands for `make_node`, and creates a new ParseNode. You can pass
-in either a Token or a string production name for the first value; an
-initializer list of `ParseNode*` children for the second argument; and
-a line number to associate with the node. If you pass a Token for the
-first argument, the line is automatically filled in for you; for
-non-terminal productions, you'll need to assign the node its line
-manually. Returns the newly-created node.
-
-`pb` stands for `push_back` and adds a child to right of a node's
-existing children. Note that this function is defined on the
-`ParseNode`, not on the `Parser`, and so is called with some
-Lemon-aliased or newly-constructed node and not with `p->`. Returns
-the _containing_ (not child) node.
-
 
 _____________________________________________________________________
 
@@ -450,9 +567,9 @@ How Does It Work?
 
 Most of the moving parts are in `ParserImpl.cpp`, which implements the
 lexer, parse tree, and Python module interface. A small amount of code
-(`void _init_lexer(){...}`) is generated to configure the lexer from the
-input file, but this is merely appended to the verbatim
-`ParseImpl.cpp` file.
+(`void _init_lexer(){...}`) is generated to configure the lexer from
+the input file, but this is merely inserted into the generated Lemon
+input file itself.
 
 A number of seemingly-weird decisions in the C++ widgetry are the
 result of adapting to the Lemon grammar action
@@ -480,13 +597,12 @@ ownership semantics.
 The python aspect of lemon-py reads the input grammar file, builds the
 lexer configuration, and outputs a Lemon grammar file that inlines the
 lexer configuration and includes the `ParserImpl.cpp` file to
-implement the lexer and parser environment.
-
-The file is placed in a temporary working directory and `lemon` is
-invoked on it to generate the final source code for the parser
-module. The module is then built with standard pybind11 settings,
-using `g++`. Finally, it is copied into the current `python3`
-interpreter's personal site-packages for the current user.
+implement the lexer and parser environment. The file is placed in a
+temporary working directory and `lemon` is invoked on it to generate
+the final source code for the parser module. The module is then built
+with standard pybind11 settings, using `g++`. Finally, it is copied
+into the current `python3` interpreter's personal site-packages for
+the current user.
 
 
 Limitations
@@ -512,8 +628,8 @@ of defining a new lexer. I don't currently need such a thing, and I
 don't have the energy to implement it just for completeness' sake.
 
 The same goes for the output, which is a value-typed tree full of
-(potentially-redundant) strings. For very large inputs, and especially
-for deeply-nested non-terminal productions (complicated grammars), the
+highly-redundant strings. For very large inputs, and especially for
+deeply-nested non-terminal productions (complicated grammars), the
 parse tree itself can be very large. In practice, for most industry
 DSLs, hobby languages, and research languages, this is not a real
 limitation. Inputs are rarely 1 MiB of text, let alone the GiB it
@@ -521,16 +637,17 @@ would take to challenge most modern computers.
 
 These issues can be alleviated by re-using the proven Lemon grammar
 with a custom (buffering) lexer, grammar actions, and/or tree type
-when moving from typical usage to large-scale usage. The biggest gains
+when moving from typical usage to large-input usage. The biggest gains
 come from rewriting with a high-level AST, built directly in the
 grammar actions, which can collapse many intermediate parse nodes into
 fewer syntax nodes.
 
-Finally, in the memory hog department, I use recursive functions all
-over the place. If you have really recursive grammars or extremely
-long lexer literals, you might run into the stack limit on your
-machine. I've been programming for 25+ years now have have _only_ run
-out of stack when there's been an error causing infinite recursion.
+Finally, in the memory hog department, both Lemon and I use recursive
+functions all over the place. If you have really recursive grammars or
+extremely long lexer literals, you might run into the stack limit on
+your machine. I've been programming for 25+ years now have have _only_
+run out of stack when there's been an error causing infinite
+recursion.
 
 lemon-py is also probably unsuitable for parsing binary or unicode
 streams. The underlying Lemon parsers are fully capable of working
@@ -557,7 +674,7 @@ some_func() - 0.2) / 6.2`), at which point controlling operator and
 production precedence becomes critical.
 
 Literally every time I have tried an LL or PEG parser generator on any
-sufficiently complicated grammar, I have run into some ridiculous
+sufficiently-complicated grammar, I have run into some ridiculous
 precedence or ambiguity issue that has to be solved by rewriting some
 big chunk of my expression tree into something substantially less
 maintainable. It becomes complicated to explore "what if?" questions
@@ -569,32 +686,34 @@ Lemon accepts relatively "normal" EBNF grammars, has an outstanding
 grammar action system, and critically implements a LALR(1)
 parser. Furthermore, it implements a full suite of associativity and
 precedence rules for terminals. Finally, unlike `bison`/`Yacc` output,
-the Lemon parser code is safe by default for multiple instantiation
-with no state shared between instances--I also prefer Lemon's overall
-syntax to `bison`. In Lemon, I can simply write down the grammar for
-my language and resolve ambiguities abstractly instead of by coercing
-the grammar itself.
+the Lemon parser code implements consistent memory reclamation and is
+safe by default for multiple instantiation with no state shared
+between instances. I also prefer Lemon's overall syntax to `bison`. In
+Lemon, I can simply write down the grammar for my language and resolve
+ambiguities abstractly instead of by coercing the grammar itself.
 
 At the same time, Lemon is a fairly old project (started in the 80's)
 and has a relatively naive API. While it's suitable for directly
 generating an AST with appropriate types and grammar rules, it works
-only with "trivial" types, provides no default/generic parse tree
+only with "trivial" C types, provides no default/generic parse tree
 data, and it requires an external, proper lexer. As a result, when
 working with it in the past, I have been inclined to develop the
 target language's custom lexer and AST type framework at the same time
-as the parser grammar. Since Lemon works only with raw pointers (or
-trivial value types), this inclines the AST design toward owning raw
-pointers, which feels pretty gross here in 2021.
+as the parser grammar. Since Lemon works only with raw pointers, this
+inclines the AST design toward owning raw pointers, which feels pretty
+gross here in 2021.
 
 Likewise, since I'm rarely targeting general-purpose languages where
 translation units become enormous, nor am I often targeting machine-
 code back ends where bit-twiddling and isomorphic binary
-representation are routine, and I don't need blinding performance...
-implementing the whole of my compiler in C++ often feels onerous. I
-want my favorite parser available from Python, with the option of
-using the same grammar in C++ if I'm ready to build a native compiler.
+representation are routine, nor do I need blinding performance...
+implementing the whole of my compiler in C++ from the very start feels
+onerous. I want my favorite parser available from Python, with the
+option of using the same grammar in C++ if I'm ready to build a native
+compiler.
 
-There exist other LR or LALR parser generators for Python:
+There exist other LR or LALR parser generators for Python that I know
+of:
 
 * [Lark](https://github.com/lark-parser/lark)
 * [lrparsing](https://pypi.org/project/lrparsing/)
@@ -607,7 +726,7 @@ code, which can make them attractive for certain applications. I do
 not like that approach, as I find reading and following the recursion
 of different rules much more complicated when cluttered by the Python
 syntax on top of the grammar's own definition syntax. You might like
-it better than writing C++ grammar actions, though.
+that better than writing C++ grammar actions, though.
 
 Lark is probably the closest in capabilities and design to lemon-py,
 in that it is driven by a data file (string) defining the grammar. It
@@ -617,7 +736,8 @@ despite the algorithm it uses, it functionally has many of the same
 shortcomings as typical LL and PEG parser generators.
 
 Of those options, only `pyleri` is capable of outputting a parser
-generator in C.
+generator in C. I found it only after I started this project, and its
+syntax left me undeterred from finishing.
 
 
 Anticipated Questions
@@ -628,12 +748,14 @@ Q. Windows support?
 A. I have no idea how to easily, automatically compile a Python
 extension on Windows. I think we would need to output a VS project,
 and that's more than I want to deal with. Especially because I haven't
-written code on Windows in years.
+written code on Windows in years. If you know how to do this, please
+submit a PR.
 
 
 Q. OSX support?
 
-A. Should be easily enough to make that work. Please submit a PR.
+A. Should be easily enough to make that work, but I do not have a
+Mac. Please submit a PR or Macbook.
 
 
 Q. Why C++ instead of C?
@@ -687,6 +809,15 @@ The C++ header file defines the `parser` namespace, in which you can
 find the `ParseNode` implementation as well as `ParseNode
 parse_string(std::string const&)` and `std::string dotify(ParseNode
 const&)`.
+
+
+Q. Why doesn't lemon-py automatically write grammar actions?
+
+A. I haven't figure out how to do that without parsing the grammar
+definition. And I don't want to do that without a tool like
+lemon-py. And I don't want to have a bootstrapping problem.
+
+Although, as I think about it...
 
 
 

@@ -520,6 +520,11 @@ struct ParseNode {
 
     /** Set the line number of this node. */
     ParseNode* l(int64_t line) { this->line = line; return this; }
+
+private:
+    friend class Parser;
+    friend class std::unique_ptr<ParseNode>;
+    ParseNode() = default;
 };
 
 /**
@@ -571,7 +576,7 @@ public:
 
     /** Make a new node. */
     ParseNode* make_node(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1) {
-        auto node = std::make_unique<ParseNode>();
+        auto node = std::unique_ptr<ParseNode>(new ParseNode); // can't use `make_unique` because the constructor's private.
         node->value = value;
         if (std::holds_alternative<Token>(value)) {
             node-> line = std::get<Token>(value).line;
