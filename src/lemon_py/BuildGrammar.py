@@ -35,7 +35,8 @@ def data_file(*filename: str):
 
 
 GRAMMAR_HEADER_FILE = data_file("header.lemon")
-PARSER_IMPL_FILE = data_file("ParserImpl.cpp")
+
+IMPL_TEXT = "\n#include <ParserImpl.cpp> // include the implementation file \n\n"
 
 LEMON = data_file("lemon")
 LEMON_TEMPLATE = data_file("lempar.c")
@@ -51,6 +52,8 @@ def gpp_command(module_name: str):
 #        "-Wl,-z,defs",
         f"-DPYTHON_PARSER_MODULE_NAME={module_name}",
         f"-I{pybind11.get_include()}",
+        f"-I{os.path.dirname(__file__)}", # add this directory to pick up 'ParseNode.hpp'
+        f"-I{os.path.abspath('.')}",
         "concat_grammar.c",
         "-o",
         f"{module_name}.so"
@@ -69,8 +72,7 @@ def concatenate_input(grammar_text: str):
     with open(GRAMMAR_HEADER_FILE, 'r') as f:
         header_text = f.read()
     
-    with open(PARSER_IMPL_FILE, 'r') as f:
-        impl_text = f.read()
+    impl_text = IMPL_TEXT
 
     lexer_def = make_lexer(grammar_text)
 

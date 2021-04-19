@@ -21,10 +21,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
-
-
-#line 2 "ParserImpl.cpp"
-
 #include <memory>
 #include <vector>
 #include <variant>
@@ -36,8 +32,11 @@ SOFTWARE.
 #include <regex>
 #include <tuple>
 #include <sstream>
-#include "concat_grammar.h"
 #include <cstdio>
+
+// these look like system header includes, but really it just expects everything in path
+#include <concat_grammar.h>
+#include <ParseNode.hpp>
 
 // Forward declarations of types needed for Lemon function forward declarations
 // it's turtles all the way down when you've got no headers lol
@@ -654,210 +653,6 @@ public:
 
 namespace parser {
 
-#ifndef LEMON_PY_SUPPRESS_PYTHON
-/** Get a string value or None. */
-py::object string_or_none(std::optional<std::string> const& v) {
-    if (!v) {
-        return py::none();
-    }
-    else {
-        return py::str(v.value());
-    }
-}
-#endif
-
-#ifdef LEMON_PY_SUPPRESS_PYTHON
-    /** When python is suppressed, stubs out the `dict` definition used to hold parse node attributes. */
-    namespace py { using dict = void*; }
-#endif
-
-/**
- * Sanitize a string for dot.
-*/
-std::string sanitize(std::string in) {
-    auto clean = [&in] (char c, const char* replace, int skipForward = 0) {
-        size_t res = 0;
-        while((res = in.find(c, res)) < std::string::npos) {
-            in.erase(res, 1);
-            in.insert(res, replace);
-            res += skipForward;
-        }
-    };
-
-    clean('&', "&amp;", 1);
-    clean('"', "&quot;");
-    //clean('\'', "&apos;");
-    clean('<', "&lt;");
-    clean('>', "&gt;");
-
-    return std::move(in);
-}
-
-/**
- * A value-typed parse node (in contrast to the indirect, pointer-based parse tree above).
-*/
-struct ParseNode {
-    std::optional<std::string> production; ///< the production name, if an internal node
-    std::optional<std::string> tokName; ///< the token name, if a terminal node
-    std::optional<std::string> value; ///< the token value, if a value token
-    int64_t line; ///< line number for this node. -1 if unknown.
-    std::vector<ParseNode> children; ///< all the children of this parse node
-    int id; ///< id number, unique within a single tree
-    py::dict attr; ///< if python is enabled, this is a dictionary to contain attributes added by a python transformer
-
-    ParseNode() : production(), tokName(), value(), line(-1), children(), id(-1), attr() {}
-    ParseNode(ParseNode && o) : production(std::move(o.production)), tokName(std::move(o.tokName)), value(std::move(o.value)), line(o.line), children(std::move(o.children)), id(o.id), attr(std::move(o.attr)) {
-        o.id = -1;
-    }
-
-    ParseNode& operator=(ParseNode && o) {
-        using namespace std;
-        production = move(o.production);
-        tokName = move(o.tokName);
-        value = move(o.value);
-        line = o.line;
-        children = move(o.children);
-        id = o.id;
-        o.id = -1;
-        attr = move(o.attr);
-
-        return *this;
-    }
-
-    ParseNode(ParseNode const&) = default; // we're well-defined to copy all the way down, so this is fine.
-    ParseNode& operator=(ParseNode const&) = default;
-
-#ifndef LEMON_PY_SUPPRESS_PYTHON
-
-    py::object getProduction() const {
-        return string_or_none(production);
-    }
-
-    py::object getValue() const {
-        return string_or_none(value);
-    }
-
-    py::object getToken() const {
-        return string_or_none(tokName);
-    }
-
-    py::dict asDict() const {
-        py::dict myDict;
-        myDict["production"] = getProduction();
-        myDict["type"] = getToken();
-        myDict["value"] = getValue();
-        myDict["id"] = id;
-        myDict["line"] = line;
-        myDict["attr"] = attr;
-
-        auto childList = py::list();
-        for (auto const& c : *this) {
-            childList.append(c.asDict());
-        }
-        myDict["c"] = childList;
-
-        return myDict;
-    }
-
-#endif
-
-    /**
-     * Return a halfway reasonable string representation of the node (but not its children).
-    */
-    std::string toString() const {
-        char outbuf[1024]; // just do the first 1k characters
-        if (production) {
-            snprintf(outbuf, 1024, "{%s} [%lu]", production.value().c_str(), children.size());
-        }
-        else {
-            snprintf(outbuf, 1024, "%s <%s>", tokName.value().c_str(), value.value().c_str());
-        }
-
-        return std::string(outbuf);
-    }
-
-    /**
-     * Add this node and its children to the dot graph being built up in `out`.
-    */
-    void dotify(std::stringstream & out, const ParseNode * parent) const {
-        char buf[1024];
-
-        if (production) {
-            snprintf(buf, 1024, "node [shape=record, label=\"{<f0>line:%ld | <f1> %s }\"] %d;\n", line, sanitize(production.value()).c_str(), id);
-        }
-        else {
-            snprintf(buf, 1024, "node [shape=record, label=\"{<f0>line:%ld | { <f1> %s | <f2> %s}}\"] %d;\n", line, sanitize(tokName.value()).c_str(), sanitize(value.value()).c_str(), id);
-        }
-        out << buf;
-
-        if (parent) {
-            snprintf(buf, 1024, "%d -> %d;\n", parent->id, id);
-            out << buf;
-        }
-
-        for (auto const& c : children) {
-            c.dotify(out, this);
-        }
-    }
-
-    /**
-     * Get a particular child node.
-    */
-    ParseNode const& operator[](size_t index) const {
-        if (index >= children.size()) {
-            throw std::runtime_error("Child index out of range.");
-        }
-        return children[index];
-    }
-
-    /**
-     * Get children iterator.
-    */
-    decltype(children)::const_iterator begin() const {
-        return children.cbegin();
-    }
-
-    /**
-     * Get end of children vector.
-    */
-    decltype(children)::const_iterator end() const {
-        return children.cend();
-    }
-
-    /**
-     * Number of children of this node.
-    */
-    size_t childCount() const {
-        return children.size();
-    }
-
-    /**
-     * Checks for syntactic equality. Two nodes are equal if their
-     * productions, token name, and value are identical; as well
-     * as all their children being equal under this same definition.
-     * 
-     * This check is recursive.
-    */
-    bool operator==(ParseNode const& o) const {
-        if (&o == this) return true; // we're always equal to ourselves.
-
-        if (childCount() != o.childCount()) return false; // order these checks from cheapest to most expensive
-        if (tokName != o.tokName) return false;
-        if (production != o.production) return false;
-        if (value != o.value) return false;
-
-        for (auto myC = begin(), oC = o.begin(); myC != end() && oC != o.end(); ++myC, ++oC) {
-            if (*myC != *oC) return false;
-        }
-
-        return true;
-    }
-
-    bool operator!=(ParseNode const& o) const {
-        return !(*this == o);
-    }
-};
-
 /**
  * Create a complete dot graph, rooted at the given ParseNode.
 */
@@ -928,18 +723,18 @@ PYBIND11_MODULE(PYTHON_PARSER_MODULE_NAME, m) {
 
     py::class_<parser::ParseNode>(m, "Node")
     .def(py::init<>())
-    .def("__repr__", &parser::ParseNode::toString, "Get an approximation of the representation.")
-    .def("__getitem__", [](parser::ParseNode const& pn, size_t item) -> parser::ParseNode const& { return pn[item]; }, "Get a child by index.")
-    .def("__iter__", [](parser::ParseNode const& pn) { return py::make_iterator(pn.children.cbegin(), pn.children.cend()); }, "Children iterator.")
+    .def("__repr__", [](parser::ParseNode const& pn) { return py::str(pn.toString()); }, "Get an approximation of the representation.", py::return_value_policy::take_ownership)
+    .def("__getitem__", [](parser::ParseNode const& pn, size_t item) -> parser::ParseNode const& { return pn[item]; }, "Get a child by index.", py::return_value_policy::reference_internal)
+    .def("__iter__", [](parser::ParseNode const& pn) { return py::make_iterator(pn.begin(), pn.end(), py::return_value_policy::reference_internal); }, "Children iterator.")
     .def("__len__", [](parser::ParseNode const& pn) { return pn.childCount(); }, "Get number of children.")
     .def("as_dict", &parser::ParseNode::asDict, "Make a deep copy of this node and all children to a dictionary representation. `.attr` is ref-copied, but not deep-copied. ", py::return_value_policy::take_ownership)
     .def(py::self == py::self)
     .def(py::self != py::self)
-    .def_property_readonly("production", &parser::ParseNode::getProduction, "Get production if non-terminal.")
-    .def_property_readonly("type", &parser::ParseNode::getToken, "Get type if terminal.")
-    .def_property_readonly("value", &parser::ParseNode::getValue, "Get value if terminal.")
+    .def_property_readonly("production", &parser::ParseNode::getProduction, "Get production if non-terminal.", py::return_value_policy::take_ownership) // these return copies of strings
+    .def_property_readonly("type", &parser::ParseNode::getToken, "Get type if terminal.", py::return_value_policy::take_ownership)
+    .def_property_readonly("value", &parser::ParseNode::getValue, "Get value if terminal.", py::return_value_policy::take_ownership)
     .def_readonly("line", &parser::ParseNode::line, "Line number of appearance.")
-    .def_readonly("c", &parser::ParseNode::children, "Children.")
+    .def_readonly("c", &parser::ParseNode::children, "Children.", py::return_value_policy::reference_internal)
     .def_readonly("id", &parser::ParseNode::id, "ID number for this node (unique within tree).")
     .def_readonly("attr", &parser::ParseNode::attr, "Free-use attributes dictionary.");
 }

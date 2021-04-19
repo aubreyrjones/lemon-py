@@ -5,16 +5,19 @@ This project wraps the Lemon parser generator. If you aren't sure what
 a parser generator is, this is maybe not something you need.
 
 lemon-py provides functions that compile a EBNF grammar and a lexer
-definition into a native/extension module for Python 3.x. The
-resulting parser module has no external dependencies (including on
-this project) and is suitable for use as a submodule in other
-projects. This project _itself_ has several dependencies, including a
-standard GNU native build chain.
+definition into a standalone native/extension module for Python 3.x or
+C++ high-level lexer+parser definition. The resulting parser has no
+external dependencies (including on this project) and is suitable for
+use as a submodule in other projects. This project _itself_ has
+several dependencies, including a standard GNU native build chain.
 
 lemon-py parsers output a uniformly-typed parse tree. All productions
 are identified by a string name, and all terminal values are returned
 by string as well--no type conversions are applied inside of the
-parser module.
+parser module. The return parsed tree has several convenience
+operations defined on it, including GraphViz `dot` graphical
+visualization of parse trees, which ease early-stage language
+development.
 
 lemon-py grammar files are essentially just regular [lemon grammar
 files](lemon/lemon.html) but
@@ -101,18 +104,18 @@ the name you gave it with the `@pymod` directive.
 
 The module exports several free functions:
 
-* `parse(input: str) -> ParseNode` - The generated module exports a
-  function that parses a string into a parse tree, returning the root
-  node. Lex and parse errors generate `RuntimeError` with text
-  describing the error and location.
+* `parse(input: str) -> ParseNode` - parses a string into a parse
+  tree, returning the root node. Lex and parse errors generate
+  `RuntimeError` with text describing the error and location.
 
 Note that a common mistake when starting a new language is forgetting
-to define the lexer completely, covering all legal characters that
-_might_ occur in a valid parse input--potentially using skips to pass
-over irrelevant characters like whitespace and newlines. If your lexer
-is incomplete or incorrect, you will always get lexer errors from
-`parse()`. Use `lempy_build --terminals` to export a skeleton
-`@lexdef` block to make sure you cover all terminals.
+to define the lexer in its entirety, covering all legal characters
+that _might_ occur in a valid parse input all the way up to the end of
+input--potentially using skips to pass over irrelevant characters like
+whitespace and newlines. If your lexer is incomplete or incorrect, you
+will always get lexer errors from `parse()`. Use `lempy_build
+--terminals` to export a skeleton `@lexdef` block to make sure you
+cover all terminals; this includes a default whitespace skip.
 
 * `dotify(input: ParseNode) -> str` - returns a string representing
   the parse tree and its values, suitable for rendering using GraphViz
@@ -120,9 +123,10 @@ is incomplete or incorrect, you will always get lexer errors from
   GraphViz or any other external library, doing all its processing as
   raw text. GraphViz is only needed to interpret the output.
 
-The parse tree is represented by a module-defined class implemented in
-C++, with name `ParseNode`. You can use the usual `help` and `dir`
-functions to explore it.
+The parse tree is represented by an extension class named
+`ParseNode`. This class is implemented separately by each generated
+parser module, and the functions above are only meant to work on
+`ParseNode` instances created by `parse()` in the same module.
 
 Overall, this object is not a good candidate for first-class data type
 in a Python application: the object is a "value", more similar to a
@@ -131,7 +135,7 @@ subobjects. Transforms such as reordering children, pivoting subtrees,
 and other such operations are unsupported and undefined.
 
 For non-trivial usage, it's suggested that the Python application
-manipulate the parse tree only temporaily, to construct an
+manipulate the parse tree only temporaily, usually to construct an
 application-specific representation of the parsed structures. The
 parse tree can then either be discarded, or maintained in memory to
 aid in diagnostics. Keep in mind that parse trees may be enormous,
@@ -157,12 +161,12 @@ for the same structures.
   representing terminals.
 
 * `.line: int` - the line number assigned to this node from the
-  user-defined grammar actions. `-1` if undefined. Only terminals are
-  automatically annotated by the lexer with the approximate line
-  number, so parse nodes created directly from `Token` values will
-  automatically have a line number attached. Parse nodes created with
-  a production name must have their line number set within the grammar
-  action; this does not happen automatically.
+  user-defined grammar actions. `-1` if undefined/unknown. Only
+  terminals are automatically annotated by the lexer with the
+  approximate line number, so parse nodes created directly from
+  `Token` values will automatically have a line number attached. Parse
+  nodes created with a production name must have their line number set
+  within the grammar action; this does not happen automatically.
 
 * `.id: int` - an identifier for this node guaranteed to be unique
   within a single tree. These are assigned in pre-order.
@@ -185,9 +189,10 @@ for the same structures.
   structures. This can enable a JSON parse-tree export with 1 line of
   code (see `Driver.py`).
 
-`ParseNode` supports the Python container interface, including
-iteration and subscripting, over the list of its children. `mynode[2]`
-will return the 3rd child of `mynode`.
+`ParseNode` supports the Python container interface over its children,
+including iteration and subscripting. `mynode[2]` will return the 3rd
+child of `mynode`. `for c in mynode` will iterate the children of
+`mynode`.
 
 `ParseNode` equality check (via `==`) is by-value and deep. Equality
 checks that production, type, and value are equal (by string); and
@@ -472,12 +477,10 @@ representation (`parser::ParseNode`). The intermediate, indirect tree
 is deallocated and the returned tree is free of any complicated
 ownership semantics.
 
-The python aspect of lemon-py reads the grammar file, builds the lexer
-configuration, wraps the impl code into an `%include{}` block, and
-generates a new, complete Lemon input file with all of the code
-inlined before the grammar at the bottom. By this point, everything
-for the entire python module definition, except for the `pybind11`
-headers, is in that one file.
+The python aspect of lemon-py reads the input grammar file, builds the
+lexer configuration, and outputs a Lemon grammar file that inlines the
+lexer configuration and includes the `ParserImpl.cpp` file to
+implement the lexer and parser environment.
 
 The file is placed in a temporary working directory and `lemon` is
 invoked on it to generate the final source code for the parser
@@ -658,27 +661,32 @@ compiler control library, but couldn't find one. Let me know if you
 have one. Maybe as part of SCons?
 
 
-Q. Can I use the native lexer+tree+parser framework independently of
-Python?
+Q. How do I use the native lexer+tree+parser framework independently
+of Python?
 
-A. Yes, although the process is currently a bit ugly and manual. Use
-the `--debug --noinstall` options when building the grammar to
-generate all intermediate and output files to the current working
-directory (instead of a tempdir). You can use `concat_grammar.c`
-(compiled as C++) as the basis for your native parser.
+A. The process is currently a bit ugly and manual. Use the `--debug
+--noinstall` options when building the grammar to generate all
+intermediate and output files to the current working directory
+(instead of a tempdir). You'll need to edit the various includes and
+whatnot, but you should be able to untangle it. The public interface
+is defined in `ParseNode.hpp` inside the lemon-py directory, where you
+can also find `ParserImpl.cpp`.
+
+By default the generated Lemon grammar file _includes the `.cpp` file_
+in order to implement the lexer + parser environment. This makes it
+easier to build the Python module, but is probably not what you want
+for a nice clean C++ build.
 
 `#define LEMON_PY_SUPPRESS_PYTHON` will disable inclusion of
-`pybind11` and definition of python-related interfaces. The C++
-backing for these interfaces is suitable for use in native code, and
-may be found in the `parser` namespace. Some implementations may wish
-to write their own `parse()` driver that avoids the calls to
-`uplift()`, which convert from `_parser_impl` Lemon-compatibility
-types into application-facing value types. Keep in mind that the raw
-pointers holding together the `_parser_impl::ParseNode` graph do not
-own the `ParseNode`s, but rather the `Parser` that generated them owns
-the objects--nodes may not outlive their parent `Parser`.
+`pybind11` and definition of python-related interfaces. This has some
+effects in both the header and implementation file, and you should
+probably not attempt to link a C++ program to a parser built as a
+Python module.
 
-Extracting a suitable header and avoiding multiple definition is left
-as an exercise to the reader.
+The C++ header file defines the `parser` namespace, in which you can
+find the `ParseNode` implementation as well as `ParseNode
+parse_string(std::string const&)` and `std::string dotify(ParseNode
+const&)`.
+
 
 

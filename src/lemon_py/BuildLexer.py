@@ -65,10 +65,10 @@ def map_literal_token_and_value(token:str, value: str):
     return map_token_name(token) + f"      token_literal_value_map.emplace({token}, \"{escape_backslash(value)}\");\n"
 
 def implement_literal(token, litval):
-    if ":" in litval:
+    if ":" in litval: # handle a literal with a terminator
         termsplit = re.split('\s+:\s+', litval)
         reallit = escape_backslash(termsplit[0].strip())
-        if len(termsplit) == 2 and reallit and termsplit[1].strip():
+        if len(termsplit) == 2 and reallit and termsplit[1].strip(): # I should write a real parser for this...
             return f"Lexer::add_literal({token}, \"{reallit}\", \"{escape_backslash(termsplit[1].strip())}\");\n" + map_literal_token_and_value(token, reallit)
         
     return f"Lexer::add_literal({token}, \"{escape_backslash(litval)}\");\n" + map_literal_token_and_value(token, litval)
