@@ -5,8 +5,8 @@
 !whitespace : \s
 !comment : //.*\n
 
-' := CHAR
-" := STRING
+' '\ := CHAR
+' "\ := STRING
 
 ADD := +
 SUB := -

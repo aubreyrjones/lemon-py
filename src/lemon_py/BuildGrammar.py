@@ -1,3 +1,25 @@
+# MIT License
+
+# Copyright (c) 2021 Aubrey R Jones
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 import subprocess
 import tempfile
 import os.path
@@ -77,11 +99,18 @@ def extract_module(text: str):
         return "lemon_derived_parser"
     return linesplit[1].strip()
 
+def lexdef_skeleton(tokname: str):
+    justlen = 16 - len(tokname)
+    return tokname + ":=".rjust(justlen) + " " + tokname.lower() + ":".rjust(justlen) + " [^\w_]"
+
+
 def print_lang_header():
     with open('concat_grammar.h', 'r') as header_file:
-        lines = map(lambda l: l.split()[1], header_file.readlines())
+        print("/*\n@pymod unnamed_language\n\n@lexdef\n\n!whitespace : \s+\n")
+        lines = map(lambda l: lexdef_skeleton(l.split()[1].strip()), header_file.readlines())
 
         print("\n".join(lines))
+        print("@endlex\n*/")
 
 
 def build_grammar(grammar_file_path: str, install = False, use_temp = True, print_terminals = False):
@@ -112,9 +141,10 @@ def build_grammar(grammar_file_path: str, install = False, use_temp = True, prin
 if __name__ == '__main__':
     import argparse
     ap = argparse.ArgumentParser(description="Build a grammar and optionally install it to the python path.")
-    ap.add_argument('--terminals', default=False, const=True, action='store_const', help="Print the terminals header to the terminal (heh).")
-    ap.add_argument('--debug', default=False, const=True, action='store_const', help="Don't use a temp directory and don't install the language.")
+    ap.add_argument('--terminals', default=False, const=True, action='store_const', help="Print a skeleton `@lexdef` including all grammar-defined terminals.")
+    ap.add_argument('--debug', default=False, const=True, action='store_const', help="Don't use a temp directory, dump everything in cwd.")
+    ap.add_argument('--noinstall', default=False, const=True, action='store_const', help="Don't install the language, most useful with --debug.")
     ap.add_argument('grammar_file', type=str, help="The grammar file to build.")
     args = ap.parse_args()
 
-    build_grammar(args.grammar_file, not args.debug, not args.debug, args.terminals)
+    build_grammar(args.grammar_file, not args.noinstall, not args.debug, args.terminals)

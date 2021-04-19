@@ -1,3 +1,28 @@
+/*
+MIT License
+
+Copyright (c) 2021 Aubrey R Jones
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+
 #line 2 "ParserImpl.cpp"
 
 #include <memory>
@@ -82,7 +107,7 @@ struct Token {
 
     std::string value() const { 
         if (valueTable) return valueTable->getString(valueIndex); 
-        return "LITERAL";
+        return name();
     }
 
     std::string const& name() const {
@@ -171,7 +196,7 @@ struct PTNode {
 };
 
 std::regex s2regex(std::string const& s) {
-    return std::regex(s, std::regex::icase | std::regex::ECMAScript)
+    return std::regex(s, std::regex::icase | std::regex::ECMAScript);
 }
 
 /**
@@ -213,8 +238,10 @@ struct Lexer {
         valueTypes.push_back(std::make_tuple(s2regex(r), tok_code));
     }
 
-    static int singleQuoteToken;
-    static int doubleQuoteToken;
+    static std::vector<std::tuple<char, char, int>> stringDefs;
+    static void add_string_def(char delim, char escape, int tok_code) {
+        stringDefs.push_back(std::make_tuple(delim, escape, tok_code));
+    }
 
     using siter = std::string::const_iterator;
     // == instance ==
@@ -266,11 +293,13 @@ private:
         } while (skipped);
     }
 
-    siter stringEnd(char stringDelim, siter stringStart, siter end) {
+    siter stringEnd(char stringDelim, char escape, siter stringStart, siter end) {
         for (; stringStart != end; ++stringStart) {
-            if (*stringStart == '\\') {
-                if (*(stringStart + 1) == stringDelim || *(stringStart + 1) == '\\') {
-                    stringStart++; // skip past this delim
+            if (*stringStart == escape) {
+                auto nextChar = stringStart + 1;
+                if (nextChar == end) throw std::runtime_error("Lexer error: string lexing reached end of input.");
+                if (*nextChar == stringDelim || *nextChar == escape) {
+                    stringStart++; // skip past this delim, the loop will skip the escaped char
                 }
             }
             else if (*stringStart == stringDelim) {
@@ -282,21 +311,23 @@ private:
     }
 
     std::optional<Token> nextString() {
-        auto n = [this] (int tokCode, char delim) -> std::optional<Token> {
-            if (tokCode && *curPos == delim) {
-                auto send = stringEnd(delim, curPos + 1, input.cend());
+        auto n = [this] (int tokCode, char delim, char escape) -> std::optional<Token> {
+            if (tokCode && *curPos == delim) { // if we get past this, we're either going to return a string token or exception out.
+                auto send = stringEnd(delim, escape, curPos + 1, input.cend());
                 auto sstart = advanceTo(send + 1);
                 return make_token(tokCode, stringTable, std::string(sstart + 1, send), line);
             }
-            return std::nullopt;
+            else { 
+                return std::nullopt;
+            }
         };
 
-        if (auto s = n(singleQuoteToken, '\'')) {
-            return s;
-        }
-        
-        if (auto s = n(doubleQuoteToken, '"')) {
-            return s;
+        using std::get;
+
+        for (auto const& sdef : stringDefs) {
+            if (auto matchedString = n(get<2>(sdef), get<0>(sdef), get<1>(sdef))) {
+                return matchedString;
+            }
         }
 
         return std::nullopt;
@@ -377,11 +408,10 @@ public:
 
 void _init_lexer();
 
-int Lexer::singleQuoteToken = 0;
-int Lexer::doubleQuoteToken = 0;
-PTNode<int> Lexer::literals(0, std::nullopt, std::nullopt);
-std::vector<std::regex> Lexer::skips;
-std::vector<std::tuple<std::regex, int>> Lexer::valueTypes;
+PTNode<int> Lexer::literals(0, std::nullopt, std::nullopt); // root node.
+decltype(Lexer::skips) Lexer::skips;
+decltype(Lexer::valueTypes) Lexer::valueTypes;
+decltype(Lexer::stringDefs) Lexer::stringDefs;
 
 
 /** Either a production name or a token value. */
@@ -496,7 +526,7 @@ std::string sanitize(std::string in) {
 
     clean('&', "&amp;");
     clean('"', "&quot;");
-    clean('\'', "&apos;");
+    //clean('\'', "&apos;");
     clean('<', "&lt;");
     clean('>', "&gt;");
 

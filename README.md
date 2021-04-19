@@ -202,17 +202,22 @@ rules.
 Lexer definitions appear inside a comment block as a contiguous run of
 `token : pattern` definitions, one per line, starting on the line
 following `@lexdef` and continuing until `@endlex`. Note that these
-lines are _not_ removed from the grammar input to `lmeon`, and so
-should always be inside a comment block. It's an error, resulting in
-mysterious downstream problems, to define multiple `@lexdef`
-blocks. Do it once; do it right.
+definition lines are _not_ removed from the grammar input to `lemon`,
+and so should always be inside a comment block. It's an error,
+resulting in mysterious downstream problems, to define multiple
+`@lexdef` blocks. Do it once; do it right.
+
+Use `lemon_py.BuildGrammar --terminals` to output a skeleton lexer
+definition. This is derived from the header file declaring token codes
+output by `lemon`. You will want to replace the defined literal values
+with your own language's token literals, adjust terminator values and
+skips, and define value-type tokens as described below.
 
 The lexer itself is relatively basic. It handles two classes of tokens
-("literal" and "value"), plus user-defined skip patterns and
-pre-defined string support. Declarations of different classes may be
-mixed in the `@lexdef` block, and the ordering rules discussed below
-apply only to the relative definition of different tokens of the _same
-class_.
+("literal" and "value"), plus user-defined skip patterns and string
+support. Declarations of different classes may be mixed in the
+`@lexdef` block, and the ordering rules discussed below apply only to
+the relative definition of different tokens of the _same class_.
 
 "literal" tokens are defined by a fixed string of characters, and are
 stored/matched with a basic prefix tree. Literals are matched
@@ -249,11 +254,9 @@ Literal syntax with terminator: `TOKEN := literal_string : regular_expression`
  
 "value" tokens are defined by a regular expression, and are returned
 with both a token code and a text value. A single sub-match may be
-specified, and if present will denote a partial value to be extracted
-from the overall token match [note: this could be expanded with
-relative ease to permit selection of a particular match within the
-pattern]. No type conversions are done, all values are returned as
-strings.
+specified, and if present will be used to extract the submatch as the
+token's value. No type conversions are applied, all values are
+returned as strings.
 
 Value token patterns are checked in the same order they are defined
 with `add_value_type`, which is the same order they're specified in
@@ -281,18 +284,31 @@ sensitivity.
 Skip syntax: `!reminder_name : regular_expression`.
 
 Strings are handled by a set of internal functions that provide for
-escaping the delimeter. They're disabled by default. When enabled by
-defining the attached token code, they are delimited _only_ by single
-or double quotes (respectively), and are only configurable in which
-token code they are attached to. The escape character is the
-backslash, and is not configurable. [Note: this stuff could be easily
-made configurable if the `@lexdef` language were enhanced to support
-the definition.]
+escaping the delimeter (and escaping the escape by doubling it). The
+delimeter character, escape character, and token code are
+configurable. A string lexer definition is declared by starting the
+line with the `'` (single-quote) character. The next character is the
+string delimeter, and the subsequent character is the escape
+character. All whitespace is ignored, including between the delimeter
+and escape characters. Strings delimited by the given character are
+then assigned the token type appearing to the right of the `:=` on the
+line.
 
-String syntax:
+Notes: Due to lazy lexdef parsing, you can't define a string with a
+colon as a delimiter or escape. Strings are also completely unaware of
+newline characters and will continue right along until they reach
+their closing delimeter (the start of a new string?) or the end of
+input.
 
-* `" := STRING_TOK`
-* `' := CHAR_TOK`
+String syntax examples:
+
+* `' "\ := STR_TOK` - assign double-quote delimeted strings to
+  `STR_TOK`, and use the backslash as an escape character. (This is
+  mostly like normal C-style strings.)
+
+* `' @; := DOC` - assign at-sign delimeted strings to `DOC`, and use
+  the semi-colon as an escape character. Something like `@ look \@ me
+  over here @`.
 
 Token classes are tested in the following order:
 
@@ -303,6 +319,39 @@ Token classes are tested in the following order:
 
 Skips are applied repeatedly, before checking for the next lexical
 token, until no skip consumes input.
+
+Fairly simple, if semantically-incomplete, lexdef:
+
+```
+/*
+@pymod expr_parse
+
+@lexdef
+
+!whitespace : \s
+!comment : //.*\n
+
+ADD := +
+SUB := -
+MUL := *
+DIV := /
+L_PAREN := (
+R_PAREN := )
+COMMA := ,
+EQ := ==
+GETS := =
+
+FLOAT_LIT : [0-9]+\.[0-9]+
+INT_LIT : [0-9]+
+FNCALL : ([_a-z][_a-z0-9]*)\s*\( 
+IDENT : [_a-z][_a-z0-9]*
+
+' '\ := CHAR
+' "\ := STRING
+
+@endlex
+*/
+```
 
 
 Parser Definition
@@ -356,8 +405,9 @@ manually. Returns the newly-created node.
 
 `pb` stands for `push_back` and adds a child to right of a node's
 existing children. Note that this function is defined on the
-`ParseNode`, not on the `Parser`. Returns the _containing_ (not child)
-node.
+`ParseNode`, not on the `Parser`, and so is called with some
+Lemon-aliased or newly-constructed node and not with `p->`. Returns
+the _containing_ (not child) node.
 
 
 How Does It Work?
@@ -503,10 +553,10 @@ Q. Can I use the native lexer+tree+parser framework independently of
 Python?
 
 A. Yes, although the process is currently a bit ugly and manual. Use
-the `--debug` option when building the grammar to generate all
-intermediate and output files to the current working directory
-(instead of a tempdir). You can use `concat_grammar.c` (compiled as
-C++) as the basis for your native parser.
+the `--debug --noinstall` options when building the grammar to
+generate all intermediate and output files to the current working
+directory (instead of a tempdir). You can use `concat_grammar.c`
+(compiled as C++) as the basis for your native parser.
 
 `#define LEMON_PY_SUPPRESS_PYTHON` will disable inclusion of
 `pybind11` and definition of python-related interfaces. The C++
