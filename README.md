@@ -93,7 +93,7 @@ expr(e) ::= CHAR(lit).                            { e = p->mn(lit); }
 expr(e) ::= STRING(lit).                          { e = p->mn(lit); }
 ```
 
-Which is compiled and installed like: `lempy_build expressions.lemon`.
+Which is compiled and installed like: `$ lempy_build expressions.lemon`.
 
 Which can be used from Python like:
 ```
@@ -101,10 +101,14 @@ import expr_parse
 import json
 expression = expr_parse.parse('(5 + 7.2) / log(-24) + "nonsense"')
 print(json.dumps(expression.as_dict(), indent=1))
-with open('out.dot', 'w') as f: # render with `$ dot -Tpng -oparse_tree.png out.dot`
+with open('out.dot', 'w') as f:
      f.write(expr_parse.dotify(expression))
 ```
 
+Ignoring the very verbose JSON output, after rendering with `$ dot
+-Tpng -oexample_tree.png out.dot`, this yields:
+
+![Example parse tree](example_tree.png)
 
 Prereqs
 -------
@@ -330,8 +334,8 @@ a basic prefix tree. Literals are matched greedily, with the longest
 matching sequence having priority. Thus the order in which you define
 overlapping literals is largely irrelevant (although definition order
 will influence search order between disjoint literals). Literal tokens
-are returned by Lemon-defined code number, without an additional text
-value.
+are returned by Lemon-defined code number, with a value equal to the
+original lexer configuration string.
 
 NOTE: leading/trailing whitespace is _not_ preserved on the right side
 of the definition, although internal whitespace is preserved. The
@@ -436,46 +440,18 @@ over;;here@
 Token classes are tested in the following order:
 
 0. (skips)
-1. strings
-2. literals
-3. values
+1. EOF
+2. strings
+3. literals
+4. values
 
 Skips are applied repeatedly, before checking for the next lexical
-token, until no skip consumes input.
+token, until no skip consumes input. EOF is automatically emitted when
+the lexer reaches end of input. If the lexer has not reached the end
+of input, and no new token can be matched,
 
-Example lexdef:
-
-```
-/*
-@pymod expr_parse
-
-@lexdef
-
-!whitespace : \s
-!comment    : //.*\n
-
-ADD       := +
-SUB       := -
-MUL       := *
-DIV       := /
-L_PAREN   := (
-R_PAREN   := )
-COMMA     := ,
-EQ        := ==
-GETS      := =
-LAMBDA    := lambda  : [^\w]
-
-FLOAT_LIT : [0-9]+\.[0-9]+
-INT_LIT   : [0-9]+
-FNCALL    : ([_a-z][_a-z0-9]*)\s*\( 
-IDENT     : [_a-z][_a-z0-9]*
-
-' '\  := CHAR
-' "\! := STRING
-
-@endlex
-*/
-```
+An example `@lexdef` can be found in the example at the top of this
+readme.
 
 
 Parser Definition
@@ -507,56 +483,53 @@ result, you may use the occasional per-rule `%destructor` if you wish.
 
 Available functions are as follows:
 
-* `ParseNode* p->push_root(ParseNode *root)`
-* `ParseNode* p->(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1)`
-* `ParseNode* node->pb(ParseNode *child)`
-* `ParseNode* node->l(int)`
+* `ParseNode* p->push_root(ParseNode *root)` - sets the overall result
+  for the Parser parse operation. If you don't `push_root` some node
+  (usually in the top level rule), no results will be generated from
+  parsing. Returns the newly-set root node.
 
-`push_root()` sets the overall result for the Parser parse operation. If
-you don't `push_root` some node (usually in the top level rule), no
-results will be generated from parsing. Returns the newly-set root
-node.
+* `ParseNode* p->(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1)` -
+ stands for `make_node`, and creates a new ParseNode. You can pass in
+ either a `Token` or a string production name for the first value; an
+ initializer list of `ParseNode*` children for the second argument;
+ and a line number to associate with the node. If you pass a Token for
+ the first argument, the line is automatically filled in for you; for
+ non-terminal productions, you'll need to assign the node its line
+ manually. This is the workhorse of the API. Returns the newly-created
+ node.
 
-`mn()` stands for `make_node`, and creates a new ParseNode. You can
-pass in either a Token or a string production name for the first
-value; an initializer list of `ParseNode*` children for the second
-argument; and a line number to associate with the node. If you pass a
-Token for the first argument, the line is automatically filled in for
-you; for non-terminal productions, you'll need to assign the node its
-line manually. This is the workhorse of the API. Returns the
-newly-created node.
+* `ParseNode* node->pb(ParseNode *child)` - stands for `push_back` and
+  adds a child to right of a node's existing children. Note that this
+  function is defined on the `ParseNode`, not on the `Parser`, and so
+  is called with some Lemon-aliased or newly-constructed node and not
+  with `p->`. Returns the _containing_ (not child) node.
 
-`pb()` stands for `push_back` and adds a child to right of a node's
-existing children. Note that this function is defined on the
-`ParseNode`, not on the `Parser`, and so is called with some
-Lemon-aliased or newly-constructed node and not with `p->`. Returns
-the _containing_ (not child) node.
+* `ParseNode* node->l(int)` - also defined on the node, sets the line
+  number. The line number of an existing node is stored in the `.line`
+  field.
 
-`l()` is also defined on the node, and sets the line number. The line
-number of an existing node is stored in the `.line` field.
-
-Tokens `.type` and `.line` fields, and you can retrieve strings
-representing the name and value with `.name()` and `.value()`
+Tokens include `.type` and `.line` fields, and you can retrieve
+strings representing the name and value with `.name()` and `.value()`
 respectively. However, the internal fields of the token are usually
-superfluous within a grammar construction. Typically, you can just
-pass the whole `Token` object (identified by Lemon metavariable) as
-the sole argument to `p->mn()` to create a terminal node.
+superfluous within a grammar action. Typically, you can just pass the
+whole `Token` object (identified by Lemon metavariable) as the sole
+argument to `p->mn()` to create a terminal node.
 
 Check out the examples for a better idea of how to use this
 stuff. It's not especially intuitive if you've never used a parser
 generator before, and teaching you to use one is beyond the scope of
-this readme. I suggest the Dragon Book (you know the one), or any of
-the various tutorials on using Bison/Yacc. The concepts are highly
-transferable. 
+this readme. I suggest the Dragon Book (you might know the one), or
+any of the various tutorials on using Bison/Yacc. The concepts are
+highly transferable.
 
 The `test_grammars/parasol` directory contains a draft of the grammar
 for a fairly "complete" programming language, including a non-trivial
-expression tree. This goes well beyond the usual toy examples provided
-with parser generators. One real-world "wrinkle" to note is the use of
-the lexer to detect function calls and "scope refs" instead of the
-parser (by id with trailing `(` and `[` respectively), thereby
-avoiding ambiguities around function argument lists inside expression
-trees.
+expression tree. This goes well beyond the designed-to-parse toy
+examples provided with parser generators. One real-world "wrinkle" to
+note is the use of the lexer to detect function calls and "scope refs"
+instead of the parser (by id with trailing `(` and `[` respectively),
+thereby avoiding ambiguities around function argument lists inside
+expression trees.
 
 
 _____________________________________________________________________
@@ -579,7 +552,7 @@ must be trivial types, which eliminates the direct use of smart
 pointers or containers to manage memory within grammar
 actions. Instead, the lemon-py `_parser_impl::Parser` object
 internally allocates nodes into `unique_ptr`s and returns a raw
-pointer to the same object for use within the Lemon grammar
+pointer to the same object for use only within the Lemon grammar
 actions. Value tokens are treated similarly, with an integer
 terminal-code value member, but pointer and index into a table instead
 of an internal `std::string`. When the `Parser` is destructed, all of
@@ -587,9 +560,9 @@ the node and string memory is reclaimed and all
 `_parser_impl::ParseNode` and `Token` objects created by that `Parser`
 become invalid.
 
-Before returning the parse tree to the Python interface, and before it
-is destroyed (of course), the entire pointer-based internal parse tree
-is dereferenced and copied into a simplified, value-typed
+Before returning the parse tree to the high-level interface, and
+before it is destroyed (of course), the entire pointer-based internal
+parse tree is dereferenced and copied into a simplified, value-typed
 representation (`parser::ParseNode`). The intermediate, indirect tree
 is deallocated and the returned tree is free of any complicated
 ownership semantics.
