@@ -5,9 +5,9 @@ This project wraps the Lemon parser generator. If you aren't sure what
 a parser generator is, this is maybe not something you need.
 
 lemon-py provides functions that compile a EBNF grammar and a lexer
-definition into a standalone native module for Python 3.x or C++ (with
-a little work). The resulting lexer+parser is implemented entirely in
-native code, and has no external dependencies (including on this
+definition into a standalone native module for Python 3.x or (with a
+little work) C++ . The resulting lexer+parser is implemented entirely
+in native code, and has no external dependencies (including on this
 project or any Python code) and is suitable for use as a submodule in
 other projects.  You can just `import` it and run `parse()`.
 

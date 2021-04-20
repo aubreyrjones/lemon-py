@@ -175,16 +175,17 @@ struct PTNode {
     char code; ///< character contribution
     std::optional<V_T> value; ///< the output token value if matched
     std::optional<std::regex> terminatorPattern; ///< a regex used to check if the literal is properly terminated
+    std::vector<PTNode> children; ///< suffixes
+    bool isRoot; ///< is this the root node?
 
-    std::vector<PTNode> children;
-
-    PTNode(char code, std::optional<V_T> const& value, std::optional<std::regex> const& terminator) : code(code), value(value), terminatorPattern(terminator), children() {}
+    PTNode(char code, std::optional<V_T> const& value, std::optional<std::regex> const& terminator, bool isRoot = false) : code(code), value(value), terminatorPattern(terminator), children(), isRoot(isRoot) {}
 
     /**
      * Recursively add a literal to the tree.
     */
     void add_value(std::string_view const& code, V_T const& value, std::optional<std::regex> const& terminator = std::nullopt) {
         if (code.length() == 0) {
+            if (isRoot || this->value) throw std::runtime_error("Attempting to redefine lexer literal " + token_name_map[this->value.value()]);
             this->value = value;
             this->terminatorPattern = terminator;
             return;
@@ -487,7 +488,7 @@ public:
 void _init_lexer();
 
 // static storage for lexer.
-PTNode<int> Lexer::literals(0, std::nullopt, std::nullopt); // root node.
+PTNode<int> Lexer::literals(0, std::nullopt, std::nullopt, true); // root node.
 decltype(Lexer::skips) Lexer::skips;
 decltype(Lexer::valueTypes) Lexer::valueTypes;
 decltype(Lexer::stringDefs) Lexer::stringDefs;
