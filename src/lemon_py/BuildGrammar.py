@@ -152,7 +152,7 @@ def print_lang_header():
         print("@endlex\n*/")
 
 
-def build_grammar(grammar_file_path: str, install = False, use_temp = True, print_terminals = False, cpp_dir = None):
+def build_lempy_grammar(grammar_file_path: str, install = False, use_temp = True, print_terminals = False, cpp_dir = None):
     bootstrap_lemon()
 
     grammar_file_path = os.path.abspath(grammar_file_path)
@@ -195,4 +195,4 @@ if __name__ == '__main__':
     ap.add_argument('grammar_file', type=str, help="The grammar file to build.")
     args = ap.parse_args()
 
-    build_grammar(args.grammar_file, not (args.noinstall or args.cpp), not args.debug, args.terminals, os.path.abspath(args.cpp) if args.cpp else None)
+    build_lempy_grammar(args.grammar_file, not (args.noinstall or args.cpp), not args.debug, args.terminals, os.path.abspath(args.cpp) if args.cpp else None)
