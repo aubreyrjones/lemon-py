@@ -50,6 +50,7 @@ namespace _parser_impl {
 void* LemonPyParseAlloc(void *(*mallocProc)(size_t));
 void LemonPyParseFree(void *p, void (*freeProc)(void*));
 void LemonPyParse(void *yyp, int yymajor, _parser_impl::Token yyminor, _parser_impl::Parser *);
+void LemonPyParseInit(void *);
 
 
 #ifndef LEMON_PY_SUPPRESS_PYTHON
@@ -184,21 +185,26 @@ struct PTNode {
      * Recursively add a literal to the tree.
     */
     void add_value(std::string_view const& code, V_T const& value, std::optional<std::regex> const& terminator = std::nullopt) {
-        if (code.length() == 0) {
-            if (isRoot || this->value) throw std::runtime_error("Attempting to redefine lexer literal " + token_name_map[this->value.value()]);
+        if (code.length() == 0) { // all of the previous recursions have matched (or user is adding a null string?)
+            if (isRoot // yeah, it was a null string, which won't work and is extremely unlikely coming from the autogen lexer conf
+                || this->value) // of we're already set
+                    throw std::runtime_error("Attempting to redefine lexer literal " + token_name_map[this->value.value()]);
             this->value = value;
             this->terminatorPattern = terminator;
             return;
         }
 
         for (auto & c : children) {
-            if (c.code == code[0]) {
+            if (c.code == code[0]) { // one of our children is further along the chain
                 c.add_value(code.substr(1, code.length() - 1), value, terminator);
                 return;
             }
         }
 
+        // directly create the child node
         children.emplace_back(code[0], std::nullopt, std::nullopt);
+
+        // and recurse into it with the suffix of the string. If the contracted substring becomes null, that will trigger the child to take the value
         children.back().add_value(code.substr(1, code.length() - 1), value, terminator);
     }
 
@@ -216,8 +222,7 @@ struct PTNode {
      * Try to match the maximal string possible from the beginning of the input range.
     */
     std::optional<LexResult> tryValue(std::string::const_iterator first, std::string::const_iterator last) const {
-        //std::cout << "Checking " << std::string(first, last) << " against " << code << std::endl;
-        if (children.empty() || first == last) { // reached end of input or end of chain while still matching.
+        if (children.empty() || first == last) { // we'll never have a null input, so we've reached end of input or end of chain while still matching.
             goto bailout;
         }
 
@@ -230,10 +235,13 @@ struct PTNode {
         }
 
         bailout:
+        // if we got here naturally, after searching children, it's because there was a match failure on the
+        // suffix after this node. If we have a value, check the terminator and return.
         if (value && tryTerminator(first, last)) {
                 return std::make_tuple(value.value(), first);
         }
 
+        // no match, or the match is for an internal node with no value.
         return std::nullopt;
     }
 };
@@ -244,7 +252,7 @@ std::regex s2regex(std::string const& s) {
 }
 
 /**
- * This is a relatively basic lexer. It handles two classes of tokens, plus skip patterns.
+ * This is a relatively basic lexer. It handles two classes of tokens, plus skip patterns and strings.
  * 
  * "literal" tokens are defined by a fixed string of characters, and are stored in a basic
  * prefix tree (PTNode above). These are matched greedily, with the longest matching sequence
@@ -260,9 +268,18 @@ std::regex s2regex(std::string const& s) {
  * lexically and syntactically-irrelevant content. Skip patterns are applied before every
  * attempt at token extraction.
  * 
+ * Strings have user-defined delimeters and escapes, and may optionally span newlines.
+ * 
 */
 struct Lexer {
     static PTNode<int> literals;
+    static std::vector<std::regex> skips;
+    static std::vector<std::tuple<std::regex, int>> valueTypes; ///< regex pattern, token code
+    static std::vector<std::tuple<char, char, int, bool>> stringDefs; ///< delim, escape, token code, span newlines
+
+    /**
+     * Add a literal/constant token, with an optional terminator pattern.
+    */
     static void add_literal(int tok_code, std::string const& code, std::optional<std::string> const& terminator = std::nullopt) {
         literals.add_value(
                           code, 
@@ -271,10 +288,6 @@ struct Lexer {
                             std::make_optional(s2regex(terminator.value()))
                             : std::nullopt);
     }
-
-    static std::vector<std::regex> skips;
-    static std::vector<std::tuple<std::regex, int>> valueTypes; ///< regex pattern, token code
-    static std::vector<std::tuple<char, char, int, bool>> stringDefs; ///< delim, escape, token code, span newlines
 
     /** Add a skip pattern to the lexer definition. */
     static void add_skip(std::string const& r) {
@@ -313,6 +326,7 @@ private:
         auto oldPos = curPos;
         std::advance(curPos, count);
         line += countLines(oldPos, curPos);
+
         return oldPos;
     }
 
@@ -358,7 +372,8 @@ private:
                 auto nextChar = stringStart + 1;
                 if (nextChar == end) goto end_of_input;
                 if ((*nextChar == stringDelim) || (*nextChar == escape)) {
-                    stringStart++; // skip past this delim, the loop will skip the escaped char
+                    ++stringStart; // skip past this delim, the loop increment will skip the escaped char
+                    continue;
                 }
             }
             else if (!spanNewlines && (*stringStart == '\n')) {
@@ -376,7 +391,7 @@ private:
     /** Try all of the string definitions and attempt to get a string, returning nullopt if no string is possible. */
     std::optional<Token> nextString() {
         auto n = [this] (int tokCode, char delim, char escape, bool span) -> std::optional<Token> {
-            if (tokCode && *curPos == delim) { // if we get past this, we're either going to return a string token or exception out.
+            if (*curPos == delim) { // if we get past this, we're either going to return a string token or exception out.
                 auto send = stringEnd(delim, escape, span, curPos + 1, input.cend());
                 auto sstart = advanceTo(send + 1); // move past the end delim
                 return make_token(tokCode, stringTable, std::string(sstart + 1, send), line);
@@ -542,6 +557,33 @@ class Parser {
     bool successful = false; ///< have we received the successful message from the parser
 
     /**
+     * Pass the next token into the lemon parser.
+    */
+    void offerToken(Token token) {
+        currentToken = token;
+	    LemonPyParse(lemonParser, token.type, token, this);
+    }
+
+    void freeParserObject() {
+        if (lemonParser) { // could be non-null if there was an exception.
+            LemonPyParseFree(lemonParser, free);
+        }
+        lemonParser = nullptr;
+    }
+
+    void buildParserObject() {
+        if (lemonParser) {
+            freeParserObject();
+        }
+
+        lemonParser = LemonPyParseAlloc(malloc);
+
+        if (!lemonParser) {
+            throw std::runtime_error("Cannot allocate memory for parser framework.");
+        }
+    }
+
+    /**
      * Reset the parser state. Called internally by `parseString()`, so not necessary to call manually.
     */
     void reset() {
@@ -551,26 +593,20 @@ class Parser {
         currentToken = make_token(0, -1);
         root = nullptr;
         successful = false;
-    }
 
-    /**
-     * Pass the next token into the lemon parser.
-    */
-    void offerToken(Token token) {
-        currentToken = token;
-	    LemonPyParse(lemonParser, token.type, token, this);
+        buildParserObject();
     }
 
 public:
 
     /** Create a new parser, allocating lemon parser state. */
-    Parser() : lemonParser(LemonPyParseAlloc(malloc)), allNodes(), stringTable() {
+    Parser() : lemonParser(nullptr), allNodes(), stringTable() {
         _init_lexer();
     }
 
     /** Deallocate lemon parser state. */
     ~Parser() {
-        LemonPyParseFree(lemonParser, free);
+        freeParserObject();
     }
 
     using ChildrenPack = std::initializer_list<ParseNode*>;
@@ -634,10 +670,12 @@ public:
     /**
      * Parse the given input string, returning a parse tree on success.
      * 
+     * Invalidates parse nodes returned from any previous invocation of `parseString` on this Parser.
+     * 
      * @throw std::runtime_error on lex or parse error.
     */
     ParseNode* parseString(std::string const& input) {
-        reset();
+        reset(); // allocates the parser object
 
         Lexer lexer(input, stringTable);
 
