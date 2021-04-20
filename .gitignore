@@ -6,3 +6,6 @@ src/lemon_py/lemon
 
 *.so
 *concat_grammar.*
+*egg-info*
+build
+dist
