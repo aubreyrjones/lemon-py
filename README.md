@@ -69,28 +69,28 @@ IDENT : [_a-z][_a-z0-9]*
 
 toplevel ::= expr(c1).                            { p->push_root(c1); }
 
-expr(e) ::= expr(c1) ADD(o) expr(c2).             { e = p("+", {c1, c2}, o.line); }
-expr(e) ::= expr(c1) SUB(o) expr(c2).             { e = p("-", {c1, c2}, o.line); }
-expr(e) ::= expr(c1) MUL(o) expr(c2).             { e = p("*", {c1, c2}, o.line); }
-expr(e) ::= expr(c1) DIV(o) expr(c2).             { e = p("/", {c1, c2}, o.line); }
-expr(e) ::= SUB expr(c1). [MUL]                   { e = p("neg", {c1}, c1->line); }
+expr(e) ::= expr(c1) ADD(o) expr(c2).             { e = _("+", {c1, c2}, o.line); }
+expr(e) ::= expr(c1) SUB(o) expr(c2).             { e = _("-", {c1, c2}, o.line); }
+expr(e) ::= expr(c1) MUL(o) expr(c2).             { e = _("*", {c1, c2}, o.line); }
+expr(e) ::= expr(c1) DIV(o) expr(c2).             { e = _("/", {c1, c2}, o.line); }
+expr(e) ::= SUB expr(c1). [MUL]                   { e = _("neg", {c1}, c1->line); }
 expr(e) ::= L_PAREN expr(e1) R_PAREN.             { e = e1; }
 
 expr(e) ::= varref(e1).                           { e = e1; }
-varref(e) ::= IDENT(lit).                         { e = p("varref", {p(lit)}, lit.line); }
+varref(e) ::= IDENT(lit).                         { e = _("varref", {_(lit)}, lit.line); }
 
 expr(e) ::= fncall(e1).                           { e = e1; }
-fncall(e) ::= FNCALL(lit1) arg_list(c2) R_PAREN.  { e = p("fncall", {p(lit1), c2}, lit1.line); }
+fncall(e) ::= FNCALL(lit1) arg_list(c2) R_PAREN.  { e = _("fncall", {_(lit1), c2}, lit1.line); }
 
-arg_list(L) ::= .                                 { L = p("arglist"); }
-arg_list(L) ::= expr(c1).                         { L = p("arglist", {c1}, c1->line); }
+arg_list(L) ::= .                                 { L = _("arglist"); }
+arg_list(L) ::= expr(c1).                         { L = _("arglist", {c1}, c1->line); }
 arg_list(L) ::= arg_list(L1) COMMA expr(e).       { L = L1->pb(e); }
 
-expr(e) ::= FLOAT_LIT(lit).                       { e = p(lit); }
-expr(e) ::= INT_LIT(lit).                         { e = p(lit); }
+expr(e) ::= FLOAT_LIT(lit).                       { e = _(lit); }
+expr(e) ::= INT_LIT(lit).                         { e = _(lit); }
 
-expr(e) ::= CHAR(lit).                            { e = p(lit); }
-expr(e) ::= STRING(lit).                          { e = p(lit); }
+expr(e) ::= CHAR(lit).                            { e = _(lit); }
+expr(e) ::= STRING(lit).                          { e = _(lit); }
 ```
 
 Which is compiled and installed like: `$ lempy_build expressions.lemon`.
@@ -342,7 +342,7 @@ original lexer configuration string.
 
 NOTE: leading/trailing whitespace is _not_ preserved on the right side
 of the definition, although internal whitespace is preserved. The
-definition string is subjected to `str.strip()` prior to codegen.
+definition string is subjected to `str.stri_()` prior to codegen.
 
 * Literal syntax: `TOKEN := literal_string`.
 
@@ -504,7 +504,7 @@ syntax described here.
 An example Lemon production definition:
 
 ```
-expr(e) ::= expr(c1) ADD(o) expr(c2).    { e = p("+", {c1, c2}, o.line); }
+expr(e) ::= expr(c1) ADD(o) expr(c2).    { e = _("+", {c1, c2}, o.line); }
 ```
 
 The line above defines a grammar rule (preceding the `.`) with
@@ -524,24 +524,24 @@ not required to define a metavar for each element, but it _is_
 required to define a metavar for each element you wish to refer
 to. For instance, this production could omit the `(o)`, and instead
 draw line number information from the `c1` subexpression instead. You
-may name the metavars whatever you wish, except `p`, so long as it is
+may name the metavars whatever you wish, except `_`, so long as it is
 a valid C identifier. You may assign metavars to both productions and
 teminals.
 
-### Magic Variable `p`
+### Magic Variable `_` (underscore)
 
 lemon py causes every grammar action automatically to include the
-special variable `p`. This stands for "parser", and is used to
-interact with the lemon-py parse tree system. Leaving aside the
-interior details of how it's implemented, `p` can be used several ways
-from within the grammar action.
+special variable `_` (underscore). This is a handle for the parser state, 
+and is used to interact with the lemon-py parse tree system. 
+Leaving aside the interior details of how it's implemented, 
+`_` can be used several ways from within the grammar action.
 
-In the line above, `p` serves its most common purpose: creating a new
-parse node. When used in this way, `p` acts like one of the following
+In the line above, `_` serves its most common purpose: creating a new
+parse node. When used in this way, `_` acts like one of the following
 functions:
 
 ```
-p(production, children = {}, line = -1) -> node - create a new production node.
+_(production, children = {}, line = -1) -> node - create a new production node.
 ```
 
 * returns a newly-created interior parse node.
@@ -560,10 +560,10 @@ p(production, children = {}, line = -1) -> node - create a new production node.
   number from one of the tokens or child productions of the rule (as
   in the example above with the `o` token).
 
-There is a second variant of the `p` function:
+There is a second variant of the `_` function:
 
 ```
-p(TOKEN) -> node - promote a lexer token to a parse node.
+_(TOKEN) -> node - promote a lexer token to a parse node.
 ```
 
 This variant promotes a terminal/token value into a parse node. Since
@@ -571,7 +571,7 @@ line number is known for tokens (from the lexer), and terminals should
 not have children, no other arguments are required. 
 
 ```
-expr(e) ::= INT_LIT(lit).                         { e = p(lit); }
+expr(e) ::= INT_LIT(lit).                         { e = _(lit); }
 ```
 
 Note that `e = lit;` will not work, as productions and terminals do not
@@ -600,20 +600,20 @@ them:
 A canonical left-recursive list might look something like this:
 
 ```
-arg_list(L) ::= .                                 { L = p("arglist"); }
-arg_list(L) ::= expr(c1).                         { L = p("arglist", {c1}, c1->line); }
+arg_list(L) ::= .                                 { L = _("arglist"); }
+arg_list(L) ::= expr(c1).                         { L = _("arglist", {c1}, c1->line); }
 arg_list(L) ::= arg_list(L1) COMMA expr(e).       { L = L1 += e; }
 ```
 
 ### Setting the root node
 
-`p` makes a final appearance when you want to set the root node,
+`_` makes a final appearance when you want to set the root node,
 typically in your toplevel production rule. Simply assign the parse
-node you wish to serve as the root of your parse tree to the `p`
+node you wish to serve as the root of your parse tree to the `_`
 variable.
 
 ```
-toplevel ::= expr(c1).                            { p = c1; }
+toplevel ::= expr(c1).                            { _ = c1; }
 ```
 
 Check out the examples for a better idea of how to use this
@@ -904,4 +904,14 @@ operations is instead defined via some encoding of metavariable
 names. Parsing all that out sounds boring, and I remain entirely
 unconvinced that the result would be either more readable or more
 maintainable than the current approach.
+
+Q. Doesn't the use of `_` as a variable name violate some standard 
+or shadow some standard definition or something?
+
+A. I dunno. The compiler doesn't complain at all, and while I'd tend 
+to avoid names like that in general use... in the context of grammar 
+actions for building a _parse tree_, there's nothing interesting I
+can think of anything that it's a problem to shadow.
+
+
 

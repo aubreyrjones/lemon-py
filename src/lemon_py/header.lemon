@@ -1,10 +1,10 @@
 %name {LemonPyParse}
 %token_type { _parser_impl::Token }
-%extra_argument { _parser_impl::GrammarActionParserHandle p }
+%extra_argument { _parser_impl::GrammarActionParserHandle _ }
 %default_type { _parser_impl::GrammarActionNodeHandle }
-%default_destructor { p->drop_node($$); }
+%default_destructor { _->drop_node($$); }
 
-%syntax_error { p->error(); }
-%parse_failure { p->error(); }
-%parse_accept { p->success(); }
+%syntax_error { _->error(); }
+%parse_failure { _->error(); }
+%parse_accept { _->success(); }
 

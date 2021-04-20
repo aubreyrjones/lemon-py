@@ -54,10 +54,10 @@ ID             :   [_a-z][_a-z0-9\?]*
 @endlex
 */
 
-module ::= global_list(c1).                                       { p = c1; }
+module ::= global_list(c1).                                       { _ = c1; }
 
 
-global_list(L) ::= .                                              { L = p("global_list"); }
+global_list(L) ::= .                                              { L = _("global_list"); }
 global_list(L) ::= global_list(RL) global_item(c1).               { L = RL += c1; }
 
 
@@ -65,10 +65,10 @@ global_item(q) ::= pipeline(q1).                                  { q = q1; }
 global_item(q) ::= struct_def(q1).                                { q = q1; } 
 
 
-pipeline(q) ::= id(c1) L_CURLY pipeline_contents(c2) R_CURLY.     { q = p("pipeline", {c1, c2}, c1->line); }
+pipeline(q) ::= id(c1) L_CURLY pipeline_contents(c2) R_CURLY.     { q = _("pipeline", {c1, c2}, c1->line); }
 
 
-pipeline_contents(L) ::= .                                        { L = p("pipeline_contents"); }
+pipeline_contents(L) ::= .                                        { L = _("pipeline_contents"); }
 pipeline_contents(L) ::= pipeline_contents(RL) pipeline_item(c1). { L = RL += c1; }
 
 
@@ -79,27 +79,27 @@ pipeline_item(PI) ::= assignment_expr(E).                         {PI = E;}
 pipeline_item(PI) ::= include_decl(I).                            {PI = I;}
 
 
-function_def(F) ::= DEF(D) var_decl(VD) param_list(PL) GOESTO expr(E).           { F = p("function_def", {VD, PL, E}, D.line); }
-function_def(F) ::= DEF(D) scoped_var_decl(VD) param_list(PL) GOESTO expr(E).    { F = p("function_def", {VD, PL, E}, D.line); }
+function_def(F) ::= DEF(D) var_decl(VD) param_list(PL) GOESTO expr(E).           { F = _("function_def", {VD, PL, E}, D.line); }
+function_def(F) ::= DEF(D) scoped_var_decl(VD) param_list(PL) GOESTO expr(E).    { F = _("function_def", {VD, PL, E}, D.line); }
 
 
-lambda_def(L) ::= LAMBDA(LTOK) param_list(PL) GOESTO expr(E).     { L = p("lambda", {PL, E}, LTOK.line); }
+lambda_def(L) ::= LAMBDA(LTOK) param_list(PL) GOESTO expr(E).     { L = _("lambda", {PL, E}, LTOK.line); }
 
 
-param_list(PL) ::= .                                              { PL = p("param_list"); }
-param_list(PL) ::= var_decl(V).                                   { PL = p("param_list", {V}); }
+param_list(PL) ::= .                                              { PL = _("param_list"); }
+param_list(PL) ::= var_decl(V).                                   { PL = _("param_list", {V}); }
 param_list(P) ::= param_list(PL) COMMA var_decl(V).               { P = PL += V; }
 
 
-struct_def(S) ::= STRUCT(STOK) id(N) L_CURLY struct_contents(M) R_CURLY.         { S = p("struct", {N, M}, STOK.line); }
+struct_def(S) ::= STRUCT(STOK) id(N) L_CURLY struct_contents(M) R_CURLY.         { S = _("struct", {N, M}, STOK.line); }
 
 
-struct_contents(SC) ::= .                                         { SC = p("struct_contents"); }
+struct_contents(SC) ::= .                                         { SC = _("struct_contents"); }
 struct_contents(S) ::= struct_contents(SC) var_decl(V).           { S = SC += V; }
 
 
-include_decl(I) ::= INCLUDE(ITOK) id(P).                          { I = p("include", {P}, ITOK.line); }
-include_decl(I) ::= INCLUDE(ITOK) id(P) AS id(A).                 { I = p("include", {P, A}, ITOK.line);}
+include_decl(I) ::= INCLUDE(ITOK) id(P).                          { I = _("include", {P}, ITOK.line); }
+include_decl(I) ::= INCLUDE(ITOK) id(P) AS id(A).                 { I = _("include", {P, A}, ITOK.line);}
 
 
 // expressions... which is most of the language
@@ -120,16 +120,16 @@ include_decl(I) ::= INCLUDE(ITOK) id(P) AS id(A).                 { I = p("inclu
 expr(E)  ::= scoped_var_decl(V).                                  { E = V;}
 
 
-scoped_var_decl(V) ::= scope(S) var_decl(DECL) R_BRACKET.         { V = p("scoped_var_decl", {S, DECL}, DECL->line); }
+scoped_var_decl(V) ::= scope(S) var_decl(DECL) R_BRACKET.         { V = _("scoped_var_decl", {S, DECL}, DECL->line); }
 
 
-scope(I) ::= SCOPEREF(S).                                         { I = p(S); }
+scope(I) ::= SCOPEREF(S).                                         { I = _(S); }
 
 
-var_decl(V) ::= id(NAME).                                         {V = p("var_decl", {NAME}, NAME->line);}
-var_decl(V) ::= id(NAME) COLON type_id(TYPE) .                    {V = p("var_decl", {NAME, TYPE}, NAME->line);}
-var_decl(V) ::= id(NAME) COLON integer(IDX).                      {V = p("var_decl", {NAME, IDX}, NAME->line);}
-var_decl(V) ::= id(NAME) COLON type_id(TYPE) integer(IDX).        {V = p("var_decl", {NAME, TYPE, IDX}, NAME->line);}
+var_decl(V) ::= id(NAME).                                         {V = _("var_decl", {NAME}, NAME->line);}
+var_decl(V) ::= id(NAME) COLON type_id(TYPE) .                    {V = _("var_decl", {NAME, TYPE}, NAME->line);}
+var_decl(V) ::= id(NAME) COLON integer(IDX).                      {V = _("var_decl", {NAME, IDX}, NAME->line);}
+var_decl(V) ::= id(NAME) COLON type_id(TYPE) integer(IDX).        {V = _("var_decl", {NAME, TYPE, IDX}, NAME->line);}
 
 
 
@@ -141,82 +141,82 @@ expr(E) ::= function_call(F).                                     {E = F;}
 
 expr(E) ::= assignment_expr(I).                                   {E = I;}
 
-expr(E) ::= expr(L) PLUS expr(R).                                 {E = p("+", {L, R}, L->line);}
-expr(E) ::= expr(L) MINUS expr(R).                                {E = p("-", {L, R}, L->line);}
-expr(E) ::= expr(L) MULT expr(R).                                 {E = p("*", {L, R}, L->line);}
-expr(E) ::= expr(L) DIV expr(R).                                  {E = p("/", {L, R}, L->line);}
-expr(E) ::= expr(L) DOT expr(R).                                  {E = p("*.", {L, R}, L->line);}
-expr(E) ::= expr(L) SEQUENCE expr(R).                             {E = p("..", {L, R}, L->line);}
-expr(E) ::= NOT expr(I).                                          {E = p("!", {I}, I->line);}
-expr(E) ::= MINUS expr(I). [NOT]                                  {E = p("neg", {I}, I->line);}
+expr(E) ::= expr(L) PLUS expr(R).                                 {E = _("+", {L, R}, L->line);}
+expr(E) ::= expr(L) MINUS expr(R).                                {E = _("-", {L, R}, L->line);}
+expr(E) ::= expr(L) MULT expr(R).                                 {E = _("*", {L, R}, L->line);}
+expr(E) ::= expr(L) DIV expr(R).                                  {E = _("/", {L, R}, L->line);}
+expr(E) ::= expr(L) DOT expr(R).                                  {E = _("*.", {L, R}, L->line);}
+expr(E) ::= expr(L) SEQUENCE expr(R).                             {E = _("..", {L, R}, L->line);}
+expr(E) ::= NOT expr(I).                                          {E = _("!", {I}, I->line);}
+expr(E) ::= MINUS expr(I). [NOT]                                  {E = _("neg", {I}, I->line);}
 expr(E) ::= L_PAREN expr(I) R_PAREN.                              {E = I;}
 expr(E) ::= let_expr(I).                                          {E = I;}
 expr(E) ::= case_set(CS).                                         {E = CS;}
 expr(E) ::= lambda_def(L).                                        {E = L;}
-expr(E) ::= expr(L) SWIZZLE expr(R).                              {E = p(".", {L, R}, L->line);}
+expr(E) ::= expr(L) SWIZZLE expr(R).                              {E = _(".", {L, R}, L->line);}
 
-expr(E) ::= expr(L) L_AND expr(R).                                {E = p("&&", {L, R}, L->line);}
-expr(E) ::= expr(L) L_OR expr(R).                                 {E = p("||", {L, R}, L->line);}
+expr(E) ::= expr(L) L_AND expr(R).                                {E = _("&&", {L, R}, L->line);}
+expr(E) ::= expr(L) L_OR expr(R).                                 {E = _("||", {L, R}, L->line);}
 
-expr(E) ::= expr(L) B_AND expr(R).                                {E = p("&", {L, R}, L->line);}
-expr(E) ::= expr(L) B_OR expr(R).                                 {E = p("|", {L, R}, L->line);}
+expr(E) ::= expr(L) B_AND expr(R).                                {E = _("&", {L, R}, L->line);}
+expr(E) ::= expr(L) B_OR expr(R).                                 {E = _("|", {L, R}, L->line);}
 
-expr(E) ::= expr(L) LESS expr(R).                                 {E = p("<", {L, R}, L->line);}
-expr(E) ::= expr(L) LESS_EQ expr(R).                              {E = p("<=", {L, R}, L->line);}
+expr(E) ::= expr(L) LESS expr(R).                                 {E = _("<", {L, R}, L->line);}
+expr(E) ::= expr(L) LESS_EQ expr(R).                              {E = _("<=", {L, R}, L->line);}
 
-expr(E) ::= expr(L) GREATER expr(R).                              {E = p(">", {L, R}, L->line);}
-expr(E) ::= expr(L) GREATER_EQ expr(R).                           {E = p(">=", {L, R}, L->line);}
+expr(E) ::= expr(L) GREATER expr(R).                              {E = _(">", {L, R}, L->line);}
+expr(E) ::= expr(L) GREATER_EQ expr(R).                           {E = _(">=", {L, R}, L->line);}
 
-expr(E) ::= expr(L) EQ expr(R).                                   {E = p("==", {L, R}, L->line);}
-expr(E) ::= expr(L) NOT_EQ expr(R).                               {E = p("!=", {L, R}, L->line);}
-
-
-let_expr(L) ::= LET(LTOK) unscoped_assignment_list(AL) IN expr(E).    { L = p("let", {AL, E}, LTOK.line); }
+expr(E) ::= expr(L) EQ expr(R).                                   {E = _("==", {L, R}, L->line);}
+expr(E) ::= expr(L) NOT_EQ expr(R).                               {E = _("!=", {L, R}, L->line);}
 
 
-unscoped_assignment_list(AL) ::= .                                {AL = p("unscoped_assignment_list"); }
+let_expr(L) ::= LET(LTOK) unscoped_assignment_list(AL) IN expr(E).    { L = _("let", {AL, E}, LTOK.line); }
+
+
+unscoped_assignment_list(AL) ::= .                                {AL = _("unscoped_assignment_list"); }
 unscoped_assignment_list(A) ::= unscoped_assignment_list(AL) unscoped_assignment_expr(E).    {A = AL += E; }
 
 
-case_set(CS) ::= L_CURLY(LCTOK) case_list(CL) R_CURLY.            {CS = p("case_set", {CL}, LCTOK.line); }
+case_set(CS) ::= L_CURLY(LCTOK) case_list(CL) R_CURLY.            {CS = _("case_set", {CL}, LCTOK.line); }
 
 
-case_list(CL) ::= .                                               {CL = p("case_list");}
+case_list(CL) ::= .                                               {CL = _("case_list");}
 case_list(C) ::= case_list(CL) case(CS).                          {C = CL += CS; }
 
 
-case(C) ::= expr(COND) GOESTO expr(R).                            {C = p("case", {COND, R}, COND->line); }
+case(C) ::= expr(COND) GOESTO expr(R).                            {C = _("case", {COND, R}, COND->line); }
 
 
 assignment_expr(E) ::= unscoped_assignment_expr(I).               {E = I;}
-assignment_expr(E) ::= scoped_var_decl(L) EQUALS expr(R).         {E = p("=", {L, R}, L->line);}
+assignment_expr(E) ::= scoped_var_decl(L) EQUALS expr(R).         {E = _("=", {L, R}, L->line);}
 
 
-unscoped_assignment_expr(E) ::= var_decl(L) EQUALS expr(R).       {E = p("=", {L, R}, L->line);}
+unscoped_assignment_expr(E) ::= var_decl(L) EQUALS expr(R).       {E = _("=", {L, R}, L->line);}
 
 
-function_call(F) ::= fncall(NAME) arg_list(ARGS) R_PAREN.         {F = p("function_call", {NAME, ARGS}, NAME->line); }
+function_call(F) ::= fncall(NAME) arg_list(ARGS) R_PAREN.         {F = _("function_call", {NAME, ARGS}, NAME->line); }
 
 
-fncall(I) ::= FNCALL(F).                                          {I = p(F);}
+fncall(I) ::= FNCALL(F).                                          {I = _(F);}
 
 
-arg_list(PL) ::= .                                                {PL = p("arg_list"); }
-arg_list(PL) ::= expr(E).                                         {PL = p("arg_list", {E}, E->line); }
+arg_list(PL) ::= .                                                {PL = _("arg_list"); }
+arg_list(PL) ::= expr(E).                                         {PL = _("arg_list", {E}, E->line); }
 arg_list(A) ::= arg_list(PL) COMMA expr(E).                       {A = PL += E; }
 
 
-id(I) ::= ID(IDL).                                                { I = p(IDL); }
+id(I) ::= ID(IDL).                                                { I = _(IDL); }
 
 
-type_id(I) ::= ID(IDL).                                           {I = p("type_id", {p(IDL)}, IDL.line);}
-type_id(I) ::= ID(IDL) ARRAY integer(A).                          {I = p("type_id", {p(IDL), A}, IDL.line); }
+type_id(I) ::= ID(IDL).                                           {I = _("type_id", {_(IDL)}, IDL.line);}
+type_id(I) ::= ID(IDL) ARRAY integer(A).                          {I = _("type_id", {_(IDL), A}, IDL.line); }
 
 
-integer(I) ::= INT_LIT(IL).                                       {I = p(IL); }
+integer(I) ::= INT_LIT(IL).                                       {I = _(IL); }
 
 
-float_(F) ::= FLOAT_LIT(FL).                                      {F = p(FL); }
+float_(F) ::= FLOAT_LIT(FL).                                      {F = _(FL); }
 
 
 
