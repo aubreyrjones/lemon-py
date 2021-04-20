@@ -43,13 +43,14 @@ SOFTWARE.
 namespace _parser_impl {
     struct Token;
     struct Parser;
+    struct GrammarActionParserHandle;
 }
 
 // these are Lemon parser functions.
 
 void* LemonPyParseAlloc(void *(*mallocProc)(size_t));
 void LemonPyParseFree(void *p, void (*freeProc)(void*));
-void LemonPyParse(void *yyp, int yymajor, _parser_impl::Token yyminor, _parser_impl::Parser *);
+void LemonPyParse(void *yyp, int yymajor, _parser_impl::Token yyminor, _parser_impl::GrammarActionParserHandle);
 void LemonPyParseInit(void *);
 
 
@@ -543,6 +544,21 @@ private:
     ParseNode() = default;
 };
 
+/** Used to brace-enclose a list of children for various functions. */
+using ChildrenPack = std::initializer_list<ParseNode*>;
+
+/**
+ * The object actually passed into the Lemon parser, used in constructions.
+*/
+struct GrammarActionParserHandle {
+    Parser* parser; ///< pointer to the parent parser
+    Parser* operator->(); ///< get the parent pointer
+
+    /** Passthrough to make_node. */
+    ParseNode* operator()(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1);
+};
+
+
 /**
  * Implements the parser and all state for a parser run.
 */
@@ -555,14 +571,7 @@ class Parser {
 
     ParseNode *root = nullptr; ///< root node for the parse tree
     bool successful = false; ///< have we received the successful message from the parser
-
-    /**
-     * Pass the next token into the lemon parser.
-    */
-    void offerToken(Token token) {
-        currentToken = token;
-	    LemonPyParse(lemonParser, token.type, token, this);
-    }
+    GrammarActionParserHandle thisHandle { this };
 
     void freeParserObject() {
         if (lemonParser) { // could be non-null if there was an exception.
@@ -597,6 +606,15 @@ class Parser {
         buildParserObject();
     }
 
+    /**
+     * Pass the next token into the lemon parser.
+    */
+    void offerToken(Token token) {
+        currentToken = token;
+	    LemonPyParse(lemonParser, token.type, token, thisHandle);
+    }
+
+
 public:
 
     /** Create a new parser, allocating lemon parser state. */
@@ -609,7 +627,6 @@ public:
         freeParserObject();
     }
 
-    using ChildrenPack = std::initializer_list<ParseNode*>;
 
     /** Make a new node. */
     ParseNode* make_node(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1) {
@@ -690,6 +707,14 @@ public:
         return root;
     }
 };
+
+Parser* GrammarActionParserHandle::operator->() {
+    return parser;
+}
+
+ParseNode* GrammarActionParserHandle::operator()(ParseValue const& value, ChildrenPack const& children, int64_t line){
+    return parser->make_node(value, children, line);
+}
 
 
 } // namespace

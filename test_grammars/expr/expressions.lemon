@@ -28,27 +28,27 @@ IDENT : [_a-z][_a-z0-9]*
 %left ADD SUB.
 %left MUL DIV.
 
-toplevel ::= expr(c1).                            { p->push_root(p->mn("root", {c1}, c1->line)); }
+toplevel ::= expr(c1).                            { p->push_root(c1); }
 
-expr(e) ::= expr(c1) ADD(o) expr(c2).             { e = p->mn("+", {c1, c2}, o.line); }
-expr(e) ::= expr(c1) SUB(o) expr(c2).             { e = p->mn("-", {c1, c2}, o.line); }
-expr(e) ::= expr(c1) MUL(o) expr(c2).             { e = p->mn("*", {c1, c2}, o.line); }
-expr(e) ::= expr(c1) DIV(o) expr(c2).             { e = p->mn("/", {c1, c2}, o.line); }
-expr(e) ::= SUB expr(c1). [MUL]                   { e = p->mn("neg", {c1}, c1->line); }
+expr(e) ::= expr(c1) ADD(o) expr(c2).             { e = p("+", {c1, c2}, o.line); }
+expr(e) ::= expr(c1) SUB(o) expr(c2).             { e = p("-", {c1, c2}, o.line); }
+expr(e) ::= expr(c1) MUL(o) expr(c2).             { e = p("*", {c1, c2}, o.line); }
+expr(e) ::= expr(c1) DIV(o) expr(c2).             { e = p("/", {c1, c2}, o.line); }
+expr(e) ::= SUB expr(c1). [MUL]                   { e = p("neg", {c1}, c1->line); }
 expr(e) ::= L_PAREN expr(e1) R_PAREN.             { e = e1; }
 
 expr(e) ::= varref(e1).                           { e = e1; }
-varref(e) ::= IDENT(lit).                         { e = p->mn("varref", {p->mn(lit)}, lit.line); }
+varref(e) ::= IDENT(lit).                         { e = p("varref", {p(lit)}, lit.line); }
 
 expr(e) ::= fncall(e1).                           { e = e1; }
-fncall(e) ::= FNCALL(lit1) arg_list(c2) R_PAREN.  { e = p->mn("fncall", {p->mn(lit1), c2}, lit1.line); }
+fncall(e) ::= FNCALL(lit1) arg_list(c2) R_PAREN.  { e = p("fncall", {p(lit1), c2}, lit1.line); }
 
-arg_list(L) ::= .                                 { L = p->mn("arglist"); }
-arg_list(L) ::= expr(c1).                         { L = p->mn("arglist", {c1}, c1->line); }
-arg_list(L) ::= arg_list(L1) COMMA expr(e).       { L1->pb(e); L = L1; }
+arg_list(L) ::= .                                 { L = p("arglist"); }
+arg_list(L) ::= expr(c1).                         { L = p("arglist", {c1}, c1->line); }
+arg_list(L) ::= arg_list(L1) COMMA expr(e).       { L = L1->pb(e); }
 
-expr(e) ::= FLOAT_LIT(lit).                       { e = p->mn(lit); }
-expr(e) ::= INT_LIT(lit).                         { e = p->mn(lit); }
+expr(e) ::= FLOAT_LIT(lit).                       { e = p(lit); }
+expr(e) ::= INT_LIT(lit).                         { e = p(lit); }
 
-expr(e) ::= CHAR(lit).                            { e = p->mn(lit); }
-expr(e) ::= STRING(lit).                          { e = p->mn(lit); }
+expr(e) ::= CHAR(lit).                            { e = p(lit); }
+expr(e) ::= STRING(lit).                          { e = p(lit); }

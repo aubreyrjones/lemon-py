@@ -67,30 +67,30 @@ IDENT : [_a-z][_a-z0-9]*
 %left ADD SUB.
 %left MUL DIV.
 
-toplevel ::= expr(c1).                            { p->push_root(p->mn("root", {c1}, c1->line)); }
+toplevel ::= expr(c1).                            { p->push_root(c1); }
 
-expr(e) ::= expr(c1) ADD(o) expr(c2).             { e = p->mn("+", {c1, c2}, o.line); }
-expr(e) ::= expr(c1) SUB(o) expr(c2).             { e = p->mn("-", {c1, c2}, o.line); }
-expr(e) ::= expr(c1) MUL(o) expr(c2).             { e = p->mn("*", {c1, c2}, o.line); }
-expr(e) ::= expr(c1) DIV(o) expr(c2).             { e = p->mn("/", {c1, c2}, o.line); }
-expr(e) ::= SUB expr(c1). [MUL]                   { e = p->mn("neg", {c1}, c1->line); }
+expr(e) ::= expr(c1) ADD(o) expr(c2).             { e = p("+", {c1, c2}, o.line); }
+expr(e) ::= expr(c1) SUB(o) expr(c2).             { e = p("-", {c1, c2}, o.line); }
+expr(e) ::= expr(c1) MUL(o) expr(c2).             { e = p("*", {c1, c2}, o.line); }
+expr(e) ::= expr(c1) DIV(o) expr(c2).             { e = p("/", {c1, c2}, o.line); }
+expr(e) ::= SUB expr(c1). [MUL]                   { e = p("neg", {c1}, c1->line); }
 expr(e) ::= L_PAREN expr(e1) R_PAREN.             { e = e1; }
 
 expr(e) ::= varref(e1).                           { e = e1; }
-varref(e) ::= IDENT(lit).                         { e = p->mn("varref", {p->mn(lit)}, lit.line); }
+varref(e) ::= IDENT(lit).                         { e = p("varref", {p(lit)}, lit.line); }
 
 expr(e) ::= fncall(e1).                           { e = e1; }
-fncall(e) ::= FNCALL(lit1) arg_list(c2) R_PAREN.  { e = p->mn("fncall", {p->mn(lit1), c2}, lit1.line); }
+fncall(e) ::= FNCALL(lit1) arg_list(c2) R_PAREN.  { e = p("fncall", {p(lit1), c2}, lit1.line); }
 
-arg_list(L) ::= .                                 { L = p->mn("arglist"); }
-arg_list(L) ::= expr(c1).                         { L = p->mn("arglist", {c1}, c1->line); }
+arg_list(L) ::= .                                 { L = p("arglist"); }
+arg_list(L) ::= expr(c1).                         { L = p("arglist", {c1}, c1->line); }
 arg_list(L) ::= arg_list(L1) COMMA expr(e).       { L1->pb(e); L = L1; }
 
-expr(e) ::= FLOAT_LIT(lit).                       { e = p->mn(lit); }
-expr(e) ::= INT_LIT(lit).                         { e = p->mn(lit); }
+expr(e) ::= FLOAT_LIT(lit).                       { e = p(lit); }
+expr(e) ::= INT_LIT(lit).                         { e = p(lit); }
 
-expr(e) ::= CHAR(lit).                            { e = p->mn(lit); }
-expr(e) ::= STRING(lit).                          { e = p->mn(lit); }
+expr(e) ::= CHAR(lit).                            { e = p(lit); }
+expr(e) ::= STRING(lit).                          { e = p(lit); }
 ```
 
 Which is compiled and installed like: `$ lempy_build expressions.lemon`.
@@ -488,21 +488,31 @@ Available functions are as follows:
   (usually in the top level rule), no results will be generated from
   parsing. Returns the newly-set root node.
 
-* `ParseNode* p->(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1)` -
- stands for `make_node`, and creates a new ParseNode. You can pass in
- either a `Token` or a string production name for the first value; an
- initializer list of `ParseNode*` children for the second argument;
- and a line number to associate with the node. If you pass a Token for
- the first argument, the line is automatically filled in for you; for
- non-terminal productions, you'll need to assign the node its line
- manually. This is the workhorse of the API. Returns the newly-created
- node.
+* `ParseNode* p->mn(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1)` -
+  stands for `make_node`, and creates a new ParseNode. You can pass in
+  either a `Token` or a string production name for the first value; an
+  initializer list of `ParseNode*` children for the second argument;
+  and a line number to associate with the node. If you pass a Token
+  for the first argument, the line is automatically filled in for you;
+  for non-terminal productions, you'll need to assign the node its
+  line manually. This is the workhorse of the API. Returns the
+  newly-created node.
+
+* `p->mn` is _so ubiquitous_ that the `p` object itself is callable as an
+  alias for `p->mn()`. Literally just call `p(value, children, line)`, 
+  same optional arguments as the "regular" method. C++ magic, yo.
 
 * `ParseNode* node->pb(ParseNode *child)` - stands for `push_back` and
   adds a child to right of a node's existing children. Note that this
   function is defined on the `ParseNode`, not on the `Parser`, and so
   is called with some Lemon-aliased or newly-constructed node and not
-  with `p->`. Returns the _containing_ (not child) node.
+  with `p->`. Returns the _containing_ (not child) node, easing
+  chaining for list construction.
+
+* `ParseNode* node->pf(ParseNode *child)` - `push_front`, the opposite
+  of `push_back`, this adds nodes to the left of the existing
+  children. In general, needing to use this is an indication that
+  you've got a bunch of right-recursion in your grammar design.
 
 * `ParseNode* node->l(int)` - also defined on the node, sets the line
   number. The line number of an existing node is stored in the `.line`
