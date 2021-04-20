@@ -342,7 +342,7 @@ original lexer configuration string.
 
 NOTE: leading/trailing whitespace is _not_ preserved on the right side
 of the definition, although internal whitespace is preserved. The
-definition string is subjected to `str.stri_()` prior to codegen.
+definition string is subjected to `str.strip()` prior to codegen.
 
 * Literal syntax: `TOKEN := literal_string`.
 
@@ -908,15 +908,19 @@ maintainable than the current approach.
 Q. Doesn't the use of `_` as a variable name violate some standard 
 or shadow some standard definition or something?
 
-A. I dunno. The compiler doesn't complain at all, and while I'd tend 
-to avoid names like that in general use... in the context of grammar 
-actions for building a _parse tree_, there's nothing interesting I
-can think of anything that it's a problem to shadow.
+A. I don't think so, I think it's just usually frowned on since it
+kinda disappears visually. The compiler doesn't complain at all, and
+while I'd tend to avoid names like that in general use... in the
+context of self-contained grammar actions for building a parse tree,
+there's nothing interesting I can think of that it's a problem to
+shadow.
 
-Historically, this project started out using `p` as the magic variable.
-But as I polished the interface and documentation, it became apparent
-that people might like to use `p` as a metavar much more than as
-the magic constructor.
+Historically, this project started out using `p` as the magic
+variable.  But as I polished the interface and documentation, it
+became apparent that people might like to use `p` as a metavar much
+more than as the magic constructor. At the point, the only improvement
+I'm planning is automatic conversion of token to parse node types, if
+I can figure out how _not_ to pass a `Parser*` to every `Token`.
 
 
 

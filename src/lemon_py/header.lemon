@@ -2,9 +2,9 @@
 %token_type { _parser_impl::Token }
 %extra_argument { _parser_impl::GrammarActionParserHandle _ }
 %default_type { _parser_impl::GrammarActionNodeHandle }
-%default_destructor { _->drop_node($$); }
+%default_destructor { _.drop_node($$); }
 
-%syntax_error { _->error(); }
-%parse_failure { _->error(); }
-%parse_accept { _->success(); }
+%syntax_error { _.error(); }
+%parse_failure { _.error(); }
+%parse_accept { _.success(); }
 

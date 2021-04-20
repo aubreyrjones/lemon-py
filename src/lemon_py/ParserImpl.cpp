@@ -600,7 +600,6 @@ GrammarActionNodeHandle& GrammarActionNodeHandle::operator+=(GrammarActionNodeHa
 */
 struct GrammarActionParserHandle {
     Parser* parser; ///< pointer to the parent parser
-    Parser* operator->(); ///< get the parent pointer
 
     /** Passthrough to make_node. */
     GrammarActionNodeHandle operator()(std::string const& production, ChildrenPack const& children = {}, int64_t line = -1);
@@ -608,6 +607,10 @@ struct GrammarActionParserHandle {
     
     /** Passthrough to push_root. */
     GrammarActionNodeHandle operator=(GrammarActionNodeHandle newRoot);
+
+    void drop_node(GrammarActionNodeHandle & toDrop);
+    void error();
+    void success();
 };
 
 
@@ -761,10 +764,6 @@ public:
     }
 };
 
-Parser* GrammarActionParserHandle::operator->() {
-    return parser;
-}
-
 GrammarActionNodeHandle GrammarActionParserHandle::operator()(std::string const& production, ChildrenPack const& children, int64_t line){
     return parser->make_node(production, children, line);
 }
@@ -776,6 +775,10 @@ GrammarActionNodeHandle GrammarActionParserHandle::operator()(Token const& termi
 GrammarActionNodeHandle GrammarActionParserHandle::operator=(GrammarActionNodeHandle newRoot) {
     return parser->push_root(newRoot);
 }
+
+void GrammarActionParserHandle::drop_node(GrammarActionNodeHandle & toDrop) { parser->drop_node(toDrop); }
+void GrammarActionParserHandle::error() { parser->error(); }
+void GrammarActionParserHandle::success() { parser->success(); }
 
 // explicit GrammarActionNodeHandle& GrammarActionNodeHandle::operator=(Token const& tok) {
     
