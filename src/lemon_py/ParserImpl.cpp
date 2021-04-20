@@ -44,13 +44,14 @@ namespace _parser_impl {
     struct Token;
     struct Parser;
     struct GrammarActionParserHandle;
+    struct GrammarActionNodeHandle;
 }
 
 // these are Lemon parser functions.
 
 void* LemonPyParseAlloc(void *(*mallocProc)(size_t));
 void LemonPyParseFree(void *p, void (*freeProc)(void*));
-void LemonPyParse(void *yyp, int yymajor, _parser_impl::Token yyminor, _parser_impl::GrammarActionParserHandle);
+void LemonPyParse(void *, int, _parser_impl::Token, _parser_impl::GrammarActionParserHandle);
 void LemonPyParseInit(void *);
 
 
@@ -509,6 +510,30 @@ decltype(Lexer::skips) Lexer::skips;
 decltype(Lexer::valueTypes) Lexer::valueTypes;
 decltype(Lexer::stringDefs) Lexer::stringDefs;
 
+struct ParseNode;
+
+/**
+ * Used to implement syntax sugar inside the grammar actions.
+ * 
+ * Implicitly converts between PaseNode* and this handle.
+*/
+struct GrammarActionNodeHandle {
+    using ChildrenPack = std::initializer_list<GrammarActionNodeHandle>;
+    ParseNode* node;
+
+    GrammarActionNodeHandle() = default;
+    
+    // implicit conversions
+    GrammarActionNodeHandle(ParseNode* const& n) : node(n) {}
+    operator ParseNode*() { return node; }
+
+    // sugar
+    ParseNode* operator->() { return node; }
+    GrammarActionNodeHandle& operator[](ChildrenPack const& toAppend);
+    GrammarActionNodeHandle& operator+=(GrammarActionNodeHandle & rhs);
+    //explicit GrammarActionNodeHandle& operator=(Token const& tok); // need `p` in scope somehow.
+};
+
 
 /** Either a production name or a token value. */
 using ParseValue = std::variant<std::string, Token>;
@@ -522,6 +547,19 @@ struct ParseNode {
     ParseValue value; ///< the production or token
     int64_t line; ///< line for this node
     std::vector<ParseNode*> children; ///< pointers to children
+
+    /**
+     * Append a sequence of things that, individually, will
+     * convert to ParseNode*.
+    */
+    template <typename T>
+    ParseNode* append(T const& childSeq) {
+        for (auto c : childSeq) {
+            children.push_back(c);
+        }
+
+        return this;
+    }
 
     /** Add a node to the end of the children list. */
     ParseNode* push_back(ParseNode *n) { children.push_back(n); return this; }
@@ -543,19 +581,33 @@ private:
     friend class std::unique_ptr<ParseNode>;
     ParseNode() = default;
 };
-
 /** Used to brace-enclose a list of children for various functions. */
-using ChildrenPack = std::initializer_list<ParseNode*>;
+//using ChildrenPack = std::initializer_list<ParseNode*>;
+using ChildrenPack = GrammarActionNodeHandle::ChildrenPack;
+
+GrammarActionNodeHandle& GrammarActionNodeHandle::operator[](ChildrenPack const& toAppend) {
+    node->append(toAppend);
+    return *this;
+}
+
+GrammarActionNodeHandle& GrammarActionNodeHandle::operator+=(GrammarActionNodeHandle & rhs) {
+    node->children.push_back(rhs);
+    return *this;
+}
 
 /**
- * The object actually passed into the Lemon parser, used in constructions.
+ * Used to implement syntax sugar inside the grammar actions.
 */
 struct GrammarActionParserHandle {
     Parser* parser; ///< pointer to the parent parser
     Parser* operator->(); ///< get the parent pointer
 
     /** Passthrough to make_node. */
-    ParseNode* operator()(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1);
+    GrammarActionNodeHandle operator()(std::string const& production, ChildrenPack const& children = {}, int64_t line = -1);
+    GrammarActionNodeHandle operator()(Token const& terminal);
+    
+    /** Passthrough to push_root. */
+    GrammarActionNodeHandle operator=(GrammarActionNodeHandle newRoot);
 };
 
 
@@ -629,7 +681,7 @@ public:
 
 
     /** Make a new node. */
-    ParseNode* make_node(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1) {
+    GrammarActionNodeHandle make_node(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1) {
         auto node = std::unique_ptr<ParseNode>(new ParseNode); // can't use `make_unique` because the constructor's private.
         node->value = value;
         if (std::holds_alternative<Token>(value)) {
@@ -639,7 +691,8 @@ public:
             node->line = line;
         }
 
-        node->children.insert(node->children.end(), children);
+        //node->children.insert(node->children.end(), children);
+        node->append(children);
 
         auto retval = node.get();
         allNodes.emplace(retval, std::move(node));
@@ -648,14 +701,14 @@ public:
     }
 
     /** Short for make_node. */
-    ParseNode* mn(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1) {
+    GrammarActionNodeHandle mn(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1) {
         return make_node(value, children, line);
     }
     
     /**
      * Set the root node of the parse tree.
     */
-    ParseNode* push_root(ParseNode *pn) {
+    GrammarActionNodeHandle push_root(GrammarActionNodeHandle pn) {
         return root = pn;
     }
 
@@ -663,7 +716,7 @@ public:
      * Drop the given node from internal storage. Not strictly necessary, but can keep interim
      * memory usage lower.
      */
-    void drop_node(ParseNode *pn) {
+    void drop_node(GrammarActionNodeHandle pn) {
         auto it = allNodes.find(pn);
         if (it != allNodes.end()) {
             allNodes.erase(it);
@@ -712,10 +765,21 @@ Parser* GrammarActionParserHandle::operator->() {
     return parser;
 }
 
-ParseNode* GrammarActionParserHandle::operator()(ParseValue const& value, ChildrenPack const& children, int64_t line){
-    return parser->make_node(value, children, line);
+GrammarActionNodeHandle GrammarActionParserHandle::operator()(std::string const& production, ChildrenPack const& children, int64_t line){
+    return parser->make_node(production, children, line);
 }
 
+GrammarActionNodeHandle GrammarActionParserHandle::operator()(Token const& terminal){
+    return parser->make_node(terminal);
+}
+
+GrammarActionNodeHandle GrammarActionParserHandle::operator=(GrammarActionNodeHandle newRoot) {
+    return parser->push_root(newRoot);
+}
+
+// explicit GrammarActionNodeHandle& GrammarActionNodeHandle::operator=(Token const& tok) {
+    
+// }
 
 } // namespace
 
@@ -808,7 +872,3 @@ PYBIND11_MODULE(PYTHON_PARSER_MODULE_NAME, m) {
     .def_readonly("attr", &parser::ParseNode::attr, "Free-use attributes dictionary.");
 }
 #endif
-
-#define pnn(v) p->make_node(v)
-#define pmn(v) p->make_node(v)
-

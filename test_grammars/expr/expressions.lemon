@@ -28,7 +28,7 @@ IDENT : [_a-z][_a-z0-9]*
 %left ADD SUB.
 %left MUL DIV.
 
-toplevel ::= expr(c1).                            { p->push_root(c1); }
+toplevel ::= expr(c1).                            { p = c1; }
 
 expr(e) ::= expr(c1) ADD(o) expr(c2).             { e = p("+", {c1, c2}, o.line); }
 expr(e) ::= expr(c1) SUB(o) expr(c2).             { e = p("-", {c1, c2}, o.line); }
@@ -45,7 +45,7 @@ fncall(e) ::= FNCALL(lit1) arg_list(c2) R_PAREN.  { e = p("fncall", {p(lit1), c2
 
 arg_list(L) ::= .                                 { L = p("arglist"); }
 arg_list(L) ::= expr(c1).                         { L = p("arglist", {c1}, c1->line); }
-arg_list(L) ::= arg_list(L1) COMMA expr(e).       { L = L1->pb(e); }
+arg_list(L) ::= arg_list(L1) COMMA expr(e).       { L = L1 += e; }
 
 expr(e) ::= FLOAT_LIT(lit).                       { e = p(lit); }
 expr(e) ::= INT_LIT(lit).                         { e = p(lit); }

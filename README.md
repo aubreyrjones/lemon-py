@@ -110,8 +110,9 @@ Ignoring the very verbose JSON output, after rendering with `$ dot
 
 ![Example parse tree](example_tree.png)
 
-Prereqs
--------
+
+# Prereqs
+
 
 While the generated parser modules have no dependencies, this project
 _itself_ has several.
@@ -134,8 +135,8 @@ You can install via `setup.py` and `pip3`, or just add `src` to your
 setup. Hack your `PYTHONPATH`.]
 
 
-Invocation
-----------
+# Invocation
+
 
 The following modules can be invoked from the command line using
 `python3 -m MOD ARGS...`. All of these modules support a `--help`
@@ -182,8 +183,8 @@ need to be anywhere on your regular `PATH`.
 _____________________________________________________________________
 
 
-Parser Module API
------------------
+# Parser Module API
+
 
 Once you've built your language module, you can simply `import` it by
 the name you gave it with the `@pymod` directive.
@@ -288,8 +289,8 @@ typically want to know if the parse nodes express
 syntactically-equivalent (sub)expressions.
 
 
-Module Definition
------------------
+# Module Definition
+
 
 Lemon-py grammar definitions must include a `@pymod MODULE_NAME`
 directive somewhere indicating the Python `MODULE_NAME` to
@@ -299,8 +300,8 @@ inside a comment. Example:
 * `//@pymod parse_my_lang`
 
 
-Lexer Definitions
------------------
+# Lexer Definitions
+
 
 An integrated lexer is one of lemon-py's labor-saving
 features. Without it, you would need to write a lexer for each target
@@ -327,6 +328,8 @@ The lexer itself is relatively basic. It handles two classes of tokens
 string support. Declarations of different classes may be mixed in the
 `@lexdef` block, and the ordering rules discussed below apply only to
 the relative definition of different tokens of the _same class_.
+
+## Literals
 
 "literal" tokens are defined by a fixed string of
 case-sensitive/exactly-matched characters, and are stored/matched with
@@ -364,6 +367,8 @@ expression for a literal internally containing a `:` surrounded by
 spaces.
 
 * Literal syntax with terminator: `TOKEN := literal_string : regular_expression`
+
+## Values
  
 "value" tokens are defined by a regular expression, and are returned
 with both a token code and a text value. A single sub-match may be
@@ -383,7 +388,9 @@ NOTE: All regular expressions are currently matched *without* case
 sensitivity.
 
 * Value syntax: `TOKEN : regular_expression`.
- 
+
+## Skips
+
 Skip patterns are simply regexes that are used to skip whitespace,
 comments, or other lexically and syntactically-irrelevant
 content. Skip patterns are applied before every attempt at token
@@ -394,6 +401,8 @@ NOTE: All regular expressions are currently matched *without* case
 sensitivity.
 
 * Skip syntax: `!reminder_name : regular_expression`.
+
+## Strings
 
 Strings are handled by a set of internal functions that provide for
 escaping the delimiter (and escaping the escape by doubling it). The
@@ -437,6 +446,8 @@ String syntax examples:
 over;;here@
 ```
 
+## Token priority
+
 Token classes are tested in the following order:
 
 0. (skips)
@@ -456,8 +467,8 @@ An example `@lexdef` can be found in the example at the top of this
 readme.
 
 
-Parser Definition
------------------
+# Parser Definition
+
 
 The original Lemon parser-definition language is unchanged. Instead, a
 standard set of headers is included providing definitions available
@@ -465,16 +476,12 @@ for use inside the parser actions. These definitions make it
 relatively trivial to generate generic parse trees to represent
 anything Lemon can parse.
 
-A variable `_parser_impl::Parser *p` is available in every parser
-action. This forms the handle to most of the interface. Call the
-functions below like `p->mn(...)`.
-
-_You may ignore memory management for nodes created using the `p->`
-interfaces_. All of these nodes are tracked by the internal `Parser`
-state, and any that go astray will be automatically freed when the
-parser completes or fails. This is one of the motivating features for
-this project, so please abuse it merily and report leaking `ParseNode`
-on github.
+_You may ignore memory management for nodes created using the
+interfaces described in this section_. All of these nodes are tracked
+by the internal `Parser` state, and any that go astray will be
+automatically freed when the parser completes or fails. This is one of
+the motivating features for this project, so please abuse it merily
+and report leaking `ParseNode` on github.
 
 You're on your own to manage memory for your own objects you create in
 grammar actions. lemon-py defines a `%default_destructor` for the
@@ -483,49 +490,131 @@ these are ultimately unnecessary for normal-sized inputs, serving only
 to reduce interim memory usage and not to avoid memory leaks.  As a
 result, you may use the occasional per-rule `%destructor` if you wish.
 
-Available functions are as follows:
+## Micro-DSL Syntax
 
-* `ParseNode* p->push_root(ParseNode *root)` - sets the overall result
-  for the Parser parse operation. If you don't `push_root` some node
-  (usually in the top level rule), no results will be generated from
-  parsing. Returns the newly-set root node.
+Only a few, simple operations are necessary to build parse trees from
+inside Lemon's parse actions. lemon-py makes these operations as terse
+and easy as possible by defining a micro DSL using C++ operator
+overloads. If you only want to make lemon-py parse trees, you do not
+need to learn any C++ to write your grammar actions; merely learn the
+syntax described here.
 
-* `ParseNode* p->mn(ParseValue const& value, ChildrenPack const& children = {}, int64_t line = -1)` -
-  stands for `make_node`, and creates a new ParseNode. You can pass in
-  either a `Token` or a string production name for the first value; an
-  initializer list of `ParseNode*` children for the second argument;
-  and a line number to associate with the node. If you pass a Token
-  for the first argument, the line is automatically filled in for you;
-  for non-terminal productions, you'll need to assign the node its
-  line manually. This is the workhorse of the API. Returns the
-  newly-created node.
+### Rules, Actions, and Metavars
 
-* `p->mn` is _so ubiquitous_ that the `p` object itself is callable as an
-  alias for `p->mn()`. Literally just call `p(value, children, line)`, 
-  same optional arguments as the "regular" method. C++ magic, yo.
+An example Lemon production definition:
 
-* `ParseNode* node->pb(ParseNode *child)` - stands for `push_back` and
-  adds a child to right of a node's existing children. Note that this
-  function is defined on the `ParseNode`, not on the `Parser`, and so
-  is called with some Lemon-aliased or newly-constructed node and not
-  with `p->`. Returns the _containing_ (not child) node, easing
-  chaining for list construction.
+```
+expr(e) ::= expr(c1) ADD(o) expr(c2).    { e = p("+", {c1, c2}, o.line); }
+```
 
-* `ParseNode* node->pf(ParseNode *child)` - `push_front`, the opposite
-  of `push_back`, this adds nodes to the left of the existing
-  children. In general, needing to use this is an indication that
-  you've got a bunch of right-recursion in your grammar design.
+The line above defines a grammar rule (preceding the `.`) with
+productions in lower-case and terminals in upper case (this
+distinction is mandatory for Lemon). The second half of the line, in
+curly brackets, defines a grammar action. It is the grammar action
+that we use to actually build the parse tree; without grammar actions,
+a lemon-py parser will always report failure, even if the input string
+matches the grammar. Each grammar action is called only when its rule
+matches the input, so there is no need to check any additional status.
 
-* `ParseNode* node->l(int)` - also defined on the node, sets the line
-  number. The line number of an existing node is stored in the `.line`
-  field.
+In addition to defining the production rule for a regular addition
+expression, the line also defines "metavariables" (metavars) in
+parentheses after each of the elements of the production so that we
+can refer to the elements of the production within the action. It's
+not required to define a metavar for each element, but it _is_
+required to define a metavar for each element you wish to refer
+to. For instance, this production could omit the `(o)`, and instead
+draw line number information from the `c1` subexpression instead. You
+may name the metavars whatever you wish, except `p`, so long as it is
+a valid C identifier. You may assign metavars to both productions and
+teminals.
 
-Tokens include `.type` and `.line` fields, and you can retrieve
-strings representing the name and value with `.name()` and `.value()`
-respectively. However, the internal fields of the token are usually
-superfluous within a grammar action. Typically, you can just pass the
-whole `Token` object (identified by Lemon metavariable) as the sole
-argument to `p->mn()` to create a terminal node.
+### Magic Variable `p`
+
+lemon py causes every grammar action automatically to include the
+special variable `p`. This stands for "parser", and is used to
+interact with the lemon-py parse tree system. Leaving aside the
+interior details of how it's implemented, `p` can be used several ways
+from within the grammar action.
+
+In the line above, `p` serves its most common purpose: creating a new
+parse node. When used in this way, `p` acts like one of the following
+functions:
+
+```
+p(production, children = {}, line = -1) -> node - create a new production node.
+```
+
+* returns a newly-created interior parse node.
+
+* `production` is a string name used for this node, often (but not
+  always) derived from the actual grammar production left-hand side.
+
+* `children` is an optional list of parse nodes to add as children to
+  the newly-created node, enclosed in curly brackets.
+
+* `line` is an optional line number for this node. If you do not
+  include a line number, it will be recorded as `-1`. Line numbers are
+  _automatically_ extracted from TOKEN values, so when promoting a
+  token value to a terminal parse node this is not necessary. For
+  interior (production-named) nodes, you will need to source the line
+  number from one of the tokens or child productions of the rule (as
+  in the example above with the `o` token).
+
+There is a second variant of the `p` function:
+
+```
+p(TOKEN) -> node - promote a lexer token to a parse node.
+```
+
+This variant promotes a terminal/token value into a parse node. Since
+line number is known for tokens (from the lexer), and terminals should
+not have children, no other arguments are required. 
+
+```
+expr(e) ::= INT_LIT(lit).                         { e = p(lit); }
+```
+
+Note that `e = lit;` will not work, as productions and terminals do not
+share the same C type.
+
+### Parse Nodes
+
+Parse nodes created inside actions and from metavars on the right-hand
+side of the grammar production have several operations defined on
+them: 
+
+* First, they may be freely assigned to the metavar appearing on the
+  left-hand side of the production rule. This is, in fact, _required_
+  in order to link the structures together through the parser's
+  recursion. Every useful action will consist of an assignment to the
+  left-hand metavar.
+
+* Second, they define a `node += node` operator that assigns the
+  right-hand node as a child of the left-hand node, then returns the
+  left-hand node.
+
+* Less frequently used is a subscript operator `node[{list, of,
+  nodes}]` that assigns all of the listed nodes as children (note the
+  curly-brackets around the list inside the square brackets).
+
+A canonical left-recursive list might look something like this:
+
+```
+arg_list(L) ::= .                                 { L = p("arglist"); }
+arg_list(L) ::= expr(c1).                         { L = p("arglist", {c1}, c1->line); }
+arg_list(L) ::= arg_list(L1) COMMA expr(e).       { L = L1 += e; }
+```
+
+### Setting the root node
+
+`p` makes a final appearance when you want to set the root node,
+typically in your toplevel production rule. Simply assign the parse
+node you wish to serve as the root of your parse tree to the `p`
+variable.
+
+```
+toplevel ::= expr(c1).                            { p = c1; }
+```
 
 Check out the examples for a better idea of how to use this
 stuff. It's not especially intuitive if you've never used a parser
@@ -536,19 +625,18 @@ highly transferable.
 
 The `test_grammars/parasol` directory contains a draft of the grammar
 for a fairly "complete" programming language, including a non-trivial
-expression tree. This goes well beyond the designed-to-parse toy
-examples provided with parser generators. One real-world "wrinkle" to
+expression tree. This goes beyond the designed-to-parse examples
+usually provided with parser generators. One real-world "wrinkle" to
 note is the use of the lexer to detect function calls and "scope refs"
-instead of the parser (by id with trailing `(` and `[` respectively),
-thereby avoiding ambiguities around function argument lists inside
-expression trees.
+instead of the parser (by `ID`-pattern with trailing `(` and `[`
+respectively), thereby avoiding ambiguities around function argument
+lists inside expression trees.
 
 
-_____________________________________________________________________
+# Deep Matter
 
+## How Does It Work?
 
-How Does It Work?
------------------
 
 Most of the moving parts are in `ParserImpl.cpp`, which implements the
 lexer, parse tree, and Python module interface. A small amount of code
@@ -572,6 +660,12 @@ the node and string memory is reclaimed and all
 `_parser_impl::ParseNode` and `Token` objects created by that `Parser`
 become invalid.
 
+The micro-DSL for the parser actions is implemented through operator
+overload on trivial (in the technical sense) pointer wrappers. These
+operations and associated conversion operator definitions are
+contained entirely within the parser implementation file and do not
+leak into other translation units.
+
 Before returning the parse tree to the high-level interface, and
 before it is destroyed (of course), the entire pointer-based internal
 parse tree is dereferenced and copied into a simplified, value-typed
@@ -590,8 +684,8 @@ into the current `python3` interpreter's personal site-packages for
 the current user.
 
 
-Limitations
------------
+## Limitations
+
 
 The biggest limitation is probably that the parsers generated by
 lemon-py operate on in-memory strings, with no support for incremental
@@ -643,9 +737,8 @@ straightforward enhancements to the lexer, but I don't know about
 `std::regex` on binary strings.
 
 
+## Motivation and Alternatives
 
-Motivation and Alternatives
----------------------------
 
 I want to play with definitions and implementations of programming
 languages. It's hard enough to invent an unambiguous, expressive
@@ -725,8 +818,8 @@ generator in C. I found it only after I started this project, and its
 syntax left me undeterred from finishing.
 
 
-Anticipated Questions
----------------------
+# Anticipated Questions
+
 
 Q. Windows support?
 
@@ -798,11 +891,17 @@ const&)`.
 
 Q. Why doesn't lemon-py automatically write grammar actions?
 
-A. I haven't figure out how to do that without parsing the grammar
-definition. And I don't want to do that without a tool like
-lemon-py. And I don't want to have a bootstrapping problem.
+A. That sounds like a lot of work with relatively minimal gains.
 
-Although, as I think about it...
-
-
+The operator-overload DSL provided for use within grammar actions is
+as terse as permitted by C++ and my cleverness, while still providing
+full flexibility in parse tree structure. An automatic
+action-generation system would either impose unreasonably inflexible
+requirements on production structure (such as rigorously conventional
+naming). Or it would require that child-order and ellision information
+currently passed via function call argument order and assignment
+operations is instead defined via some encoding of metavariable
+names. Parsing all that out sounds boring, and I remain entirely
+unconvinced that the result would be either more readable or more
+maintainable than the current approach.
 
