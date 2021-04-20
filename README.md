@@ -84,7 +84,7 @@ fncall(e) ::= FNCALL(lit1) arg_list(c2) R_PAREN.  { e = p("fncall", {p(lit1), c2
 
 arg_list(L) ::= .                                 { L = p("arglist"); }
 arg_list(L) ::= expr(c1).                         { L = p("arglist", {c1}, c1->line); }
-arg_list(L) ::= arg_list(L1) COMMA expr(e).       { L1->pb(e); L = L1; }
+arg_list(L) ::= arg_list(L1) COMMA expr(e).       { L = L1->pb(e); }
 
 expr(e) ::= FLOAT_LIT(lit).                       { e = p(lit); }
 expr(e) ::= INT_LIT(lit).                         { e = p(lit); }
@@ -396,28 +396,28 @@ sensitivity.
 * Skip syntax: `!reminder_name : regular_expression`.
 
 Strings are handled by a set of internal functions that provide for
-escaping the delimeter (and escaping the escape by doubling it). The
-delimeter character, escape character, and token code are
+escaping the delimiter (and escaping the escape by doubling it). The
+delimiter character, escape character, and token code are
 configurable. A string lexer definition is declared by starting the
 line with the `'` (single-quote) character. The next character is the
-string delimeter, and the subsequent character is the escape
+string delimiter, and the subsequent character is the escape
 character.
 
 Finally, the special character `!` may appear as a third character,
 indicating that the string lexer should not treat reaching end of line
-before the end delimeter as an error. If the `!` is not specified, the
+before the end delimiter as an error. If the `!` is not specified, the
 lexer will automatically consider it an error for a string to cross a
 newline boundary--this is often desirable as it makes locating
 target-language syntax errors much easier.
 
 All whitespace in the delimiter definition is ignored, including
-between the delimeter and escape characters.
+between the delimiter and escape characters.
 
 Strings delimited by the given character are assigned the token code
 appearing to the right of the `:=` on the line.
 
 String values returned by the lexer _do not_ include the surrounding
-delimters.
+delimiters.
 
 Notes: Due to lazy lexdef parsing, you can't define a string with a
 colon as a delimiter or escape.
@@ -428,7 +428,7 @@ String syntax examples:
   `STR_TOK`, and use the backslash as an escape character. (This is
   mostly like normal C-style strings.)
 
-* `' @;! := DOC` - assign at-sign delimeted strings to `DOC`, use the
+* `' @;! := DOC` - assign at-sign delimited strings to `DOC`, use the
   semi-colon as an escape character, and freely pass over the newline
   character. Something like:
 
@@ -448,7 +448,9 @@ Token classes are tested in the following order:
 Skips are applied repeatedly, before checking for the next lexical
 token, until no skip consumes input. EOF is automatically emitted when
 the lexer reaches end of input. If the lexer has not reached the end
-of input, and no new token can be matched,
+of input, and no new token can be matched, an exception is
+thrown. Likewise, an exception is thrown if the lexer is called again
+_after_ having sent the EOF token.
 
 An example `@lexdef` can be found in the example at the top of this
 readme.
