@@ -67,7 +67,7 @@ IDENT : [_a-z][_a-z0-9]*
 %left ADD SUB.
 %left MUL DIV.
 
-toplevel ::= expr(c1).                            { p->push_root(c1); }
+toplevel ::= expr(c1).                            { _ = c1; }
 
 expr(e) ::= expr(c1) ADD(o) expr(c2).             { e = _("+", {c1, c2}, o.line); }
 expr(e) ::= expr(c1) SUB(o) expr(c2).             { e = _("-", {c1, c2}, o.line); }
@@ -912,6 +912,11 @@ A. I dunno. The compiler doesn't complain at all, and while I'd tend
 to avoid names like that in general use... in the context of grammar 
 actions for building a _parse tree_, there's nothing interesting I
 can think of anything that it's a problem to shadow.
+
+Historically, this project started out using `p` as the magic variable.
+But as I polished the interface and documentation, it became apparent
+that people might like to use `p` as a metavar much more than as
+the magic constructor.
 
 
 
