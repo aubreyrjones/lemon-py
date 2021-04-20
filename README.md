@@ -136,10 +136,6 @@ on the `pybind11` PyPi module (not just headers installed to system
 include paths), and probably the `python3-dev` system package to get
 the `Python.h` header. Only standard C/C++ headers are used otherwise.
 
-Start by building `lemon` with `make` in the root directory. If you
-don't do this, later commands will fail in mysterious and bizarre
-ways.
-
 You can install via `setup.py` and `pip3`, or just add `src` to your
 `PYTHONPATH`. [Note: That first part is currently lies. There's no
 setup. Hack your `PYTHONPATH`.]
