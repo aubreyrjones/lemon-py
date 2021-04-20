@@ -1,10 +1,19 @@
 Lemon Py
 --------
 
+* [Prereqs](#Prereqs)
+* [Invocation](#Invocation)
+* [High-Level Parser API](#Parser%20Module%20API)
+* [Module Directive](#%20Module%20Definition)
+* [Lexer Definition](#%20Lexer%20Definitions)
+* [Parser Definition](#%20Parser%20Definition)
+
+# Overview
+
 This project wraps the Lemon parser generator. If you aren't sure what
 a parser generator is, this is maybe not something you need.
 
-lemon-py provides functions that compile a EBNF grammar and a lexer
+lemon-py provides facilities to compile a EBNF grammar and a lexer
 definition into a standalone native module for Python 3.x or (with a
 little work) C++ . The resulting lexer+parser is implemented entirely
 in native code, and has no external dependencies (including on this
@@ -34,8 +43,8 @@ lemon-py grammar files are essentially just regular [lemon grammar
 files](lemon/lemon.html) but include an extension to support automatic
 lexer generation. 
 
-
 A lexer and grammar definition for lemon py.
+
 ```
 /*
 @pymod expr_parse
@@ -69,22 +78,22 @@ IDENT : [_a-z][_a-z0-9]*
 
 toplevel ::= expr(c1).                            { _ = c1; }
 
-expr(e) ::= expr(c1) ADD(o) expr(c2).             { e = _("+", {c1, c2}, o.line); }
-expr(e) ::= expr(c1) SUB(o) expr(c2).             { e = _("-", {c1, c2}, o.line); }
-expr(e) ::= expr(c1) MUL(o) expr(c2).             { e = _("*", {c1, c2}, o.line); }
-expr(e) ::= expr(c1) DIV(o) expr(c2).             { e = _("/", {c1, c2}, o.line); }
-expr(e) ::= SUB expr(c1). [MUL]                   { e = _("neg", {c1}, c1->line); }
+expr(e) ::= expr(c1) ADD(o) expr(c2).             { e = _("+", {c1, c2}, ~o); }
+expr(e) ::= expr(c1) SUB(o) expr(c2).             { e = _("-", {c1, c2}, ~o); }
+expr(e) ::= expr(c1) MUL(o) expr(c2).             { e = _("*", {c1, c2}, ~o); }
+expr(e) ::= expr(c1) DIV(o) expr(c2).             { e = _("/", {c1, c2}, ~o); }
+expr(e) ::= SUB expr(c1). [MUL]                   { e = _("neg", {c1}, ~c1); }
 expr(e) ::= L_PAREN expr(e1) R_PAREN.             { e = e1; }
 
 expr(e) ::= varref(e1).                           { e = e1; }
-varref(e) ::= IDENT(lit).                         { e = _("varref", {_(lit)}, lit.line); }
+varref(e) ::= IDENT(lit).                         { e = _("varref", {_(lit)}, ~lit); }
 
 expr(e) ::= fncall(e1).                           { e = e1; }
-fncall(e) ::= FNCALL(lit1) arg_list(c2) R_PAREN.  { e = _("fncall", {_(lit1), c2}, lit1.line); }
+fncall(e) ::= FNCALL(lit1) arg_list(c2) R_PAREN.  { e = _("fncall", {_(lit1), c2}, ~lit1); }
 
 arg_list(L) ::= .                                 { L = _("arglist"); }
-arg_list(L) ::= expr(c1).                         { L = _("arglist", {c1}, c1->line); }
-arg_list(L) ::= arg_list(L1) COMMA expr(e).       { L = L1->pb(e); }
+arg_list(L) ::= expr(c1).                         { L = _("arglist", {c1}, ~c1); }
+arg_list(L) ::= arg_list(L1) COMMA expr(e).       { L = L1 += e; }
 
 expr(e) ::= FLOAT_LIT(lit).                       { e = _(lit); }
 expr(e) ::= INT_LIT(lit).                         { e = _(lit); }
@@ -504,7 +513,7 @@ syntax described here.
 An example Lemon production definition:
 
 ```
-expr(e) ::= expr(c1) ADD(o) expr(c2).    { e = _("+", {c1, c2}, o.line); }
+expr(e) ::= expr(c1) ADD(o) expr(c2).    { e = _("+", {c1, c2}, ~o); }
 ```
 
 The line above defines a grammar rule (preceding the `.`) with
@@ -553,10 +562,11 @@ _(production, children = {}, line = -1) -> node - create a new production node.
   the newly-created node, enclosed in curly brackets.
 
 * `line` is an optional line number for this node. If you do not
-  include a line number, it will be recorded as `-1`. Line numbers are
-  _automatically_ extracted from TOKEN values, so when promoting a
-  token value to a terminal parse node this is not necessary. For
-  interior (production-named) nodes, you will need to source the line
+  include a line number, it will be recorded as `-1`. Use the special 
+  operator `~` on any token or parse node to fetch its line number.
+  Line numbers are _automatically_ extracted from TOKEN values, so when 
+  promoting a token value to a terminal parse node this is not necessary. 
+  For interior (production-named) nodes, you will need to source the line
   number from one of the tokens or child productions of the rule (as
   in the example above with the `o` token).
 
@@ -593,6 +603,11 @@ them:
   right-hand node as a child of the left-hand node, then returns the
   left-hand node.
 
+* Third, they define a `~` operator that reads the stored line number 
+  of an _existing_ node (it doesn't "figure out" the line, it just
+  copies through whatever you set in the node's constructor). This
+  operator also works on tokens.
+
 * Less frequently used is a subscript operator `node[{list, of,
   nodes}]` that assigns all of the listed nodes as children (note the
   curly-brackets around the list inside the square brackets).
@@ -601,7 +616,7 @@ A canonical left-recursive list might look something like this:
 
 ```
 arg_list(L) ::= .                                 { L = _("arglist"); }
-arg_list(L) ::= expr(c1).                         { L = _("arglist", {c1}, c1->line); }
+arg_list(L) ::= expr(c1).                         { L = _("arglist", {c1}, ~c1); }
 arg_list(L) ::= arg_list(L1) COMMA expr(e).       { L = L1 += e; }
 ```
 

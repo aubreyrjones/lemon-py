@@ -30,21 +30,21 @@ IDENT : [_a-z][_a-z0-9]*
 
 toplevel ::= expr(c1).                            { _ = c1; }
 
-expr(e) ::= expr(c1) ADD(o) expr(c2).             { e = _("+", {c1, c2}, o.line); }
-expr(e) ::= expr(c1) SUB(o) expr(c2).             { e = _("-", {c1, c2}, o.line); }
-expr(e) ::= expr(c1) MUL(o) expr(c2).             { e = _("*", {c1, c2}, o.line); }
-expr(e) ::= expr(c1) DIV(o) expr(c2).             { e = _("/", {c1, c2}, o.line); }
-expr(e) ::= SUB expr(c1). [MUL]                   { e = _("neg", {c1}, c1->line); }
+expr(e) ::= expr(c1) ADD(o) expr(c2).             { e = _("+", {c1, c2}, ~o); }
+expr(e) ::= expr(c1) SUB(o) expr(c2).             { e = _("-", {c1, c2}, ~o); }
+expr(e) ::= expr(c1) MUL(o) expr(c2).             { e = _("*", {c1, c2}, ~o); }
+expr(e) ::= expr(c1) DIV(o) expr(c2).             { e = _("/", {c1, c2}, ~o); }
+expr(e) ::= SUB expr(c1). [MUL]                   { e = _("neg", {c1}, ~c1); }
 expr(e) ::= L_PAREN expr(e1) R_PAREN.             { e = e1; }
 
 expr(e) ::= varref(e1).                           { e = e1; }
-varref(e) ::= IDENT(lit).                         { e = _("varref", {_(lit)}, lit.line); }
+varref(e) ::= IDENT(lit).                         { e = _("varref", {_(lit)}, ~lit); }
 
 expr(e) ::= fncall(e1).                           { e = e1; }
-fncall(e) ::= FNCALL(lit1) arg_list(c2) R_PAREN.  { e = _("fncall", {_(lit1), c2}, lit1.line); }
+fncall(e) ::= FNCALL(lit1) arg_list(c2) R_PAREN.  { e = _("fncall", {_(lit1), c2}, ~lit1); }
 
 arg_list(L) ::= .                                 { L = _("arglist"); }
-arg_list(L) ::= expr(c1).                         { L = _("arglist", {c1}, c1->line); }
+arg_list(L) ::= expr(c1).                         { L = _("arglist", {c1}, ~c1); }
 arg_list(L) ::= arg_list(L1) COMMA expr(e).       { L = L1 += e; }
 
 expr(e) ::= FLOAT_LIT(lit).                       { e = _(lit); }

@@ -156,6 +156,8 @@ struct Token {
         snprintf(outbuf, 1024, "%s <%s>", name().c_str(), value().c_str());
         return std::string(outbuf);
     }
+
+    int operator~() const { return line; }
 };
 
 /** Convenience method to make a token. */
@@ -528,10 +530,10 @@ struct GrammarActionNodeHandle {
     operator ParseNode*() { return node; }
 
     // sugar
-    ParseNode* operator->() { return node; }
     GrammarActionNodeHandle& operator[](ChildrenPack const& toAppend);
     GrammarActionNodeHandle& operator+=(GrammarActionNodeHandle & rhs);
-    //explicit GrammarActionNodeHandle& operator=(Token const& tok); // need `p` in scope somehow.
+    int operator~() const;
+    //explicit GrammarActionNodeHandle& operator=(Token const& tok); //TODO: need `_` in scope somehow.
 };
 
 
@@ -593,6 +595,10 @@ GrammarActionNodeHandle& GrammarActionNodeHandle::operator[](ChildrenPack const&
 GrammarActionNodeHandle& GrammarActionNodeHandle::operator+=(GrammarActionNodeHandle & rhs) {
     node->children.push_back(rhs);
     return *this;
+}
+
+int GrammarActionNodeHandle::operator~() const {
+    return node->line;
 }
 
 /**
