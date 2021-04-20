@@ -1,6 +1,7 @@
 
 .vscode
 src/lemon_py/elsewhere
+src/lemon_py/lemon
 *__pycache__*
 
 *.so
