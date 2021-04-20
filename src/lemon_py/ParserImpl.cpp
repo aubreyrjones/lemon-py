@@ -35,8 +35,13 @@ SOFTWARE.
 #include <cstdio>
 
 // these look like system header includes, but really it just expects everything in path
-#include <concat_grammar.h>
 #include <ParseNode.hpp>
+
+#ifndef LEMON_PY_SUPPRESS_PYTHON
+#include <concat_grammar.h>
+#else // this next line is used by the C++ codegen aspect to inline macro definitions
+struct _to_be_replaced{};
+#endif
 
 // Forward declarations of types needed for Lemon function forward declarations
 // it's turtles all the way down when you've got no headers lol

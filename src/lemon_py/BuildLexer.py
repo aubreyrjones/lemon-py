@@ -59,7 +59,7 @@ def extract_lexer_def(lemon_source: str) -> List[Tuple[str, str]]:
 
 
 def implement_skip(re_str: str):
-    return f"Lexer::add_skip(\"{escape_backslash(re_str)}\");\n\n"
+    return f"Lexer::add_skip(\"{escape_backslash(re_str)}\");\n"
 
 def map_literal_token_and_value(token:str, value: str):
     return map_token_name(token) + f"      token_literal_value_map.emplace({token}, \"{escape_backslash(value)}\");\n"
@@ -96,7 +96,8 @@ def map_token_name(token):
 def implement_lexer(lexer_def: List[Tuple[str, str]]) -> str:
     TABBY = "      "
     retval = LEXER_START[:]
-    retval += TABBY + ' token_name_map.emplace(0, "EOF");\n\n'
+    retval += TABBY + 'token_name_map.emplace(0, "EOF");\n'
+    retval += TABBY + 'token_literal_value_map.emplace(0, "<lexer eof>");\n\n'
     for tok, pattern in lexer_def:
         if tok.startswith("'"):
             stok = pattern.strip()[1:].strip() # for strings, the token/pattern switch places

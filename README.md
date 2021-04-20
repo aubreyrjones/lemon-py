@@ -3,10 +3,11 @@ Lemon Py
 
 * [Prereqs](#Prereqs)
 * [Invocation](#Invocation)
-* [High-Level Parser API](#Parser%20Module%20API)
-* [Module Directive](#%20Module%20Definition)
-* [Lexer Definition](#%20Lexer%20Definitions)
-* [Parser Definition](#%20Parser%20Definition)
+* [Generated Parser API](#Parser-Module-API)
+* [Module Directive](#Module-Definition)
+* [Lexer Definition](#Lexer-Definitions)
+* [Parser Definition](#Parser-Definition)
+* [C++](#C++)
 
 # Overview
 
@@ -646,6 +647,41 @@ note is the use of the lexer to detect function calls and "scope refs"
 instead of the parser (by `ID`-pattern with trailing `(` and `[`
 respectively), thereby avoiding ambiguities around function argument
 lists inside expression trees.
+
+
+# C++
+
+Generated parser modules are designed to be usable from C++
+applications (almost) as easily as Python. Use `lempy_build --cpp
+OUTPUT_DIR` to generate C++ files for your parser. The directory (and
+each parent) will be created if it does not exist.
+
+`ParseNode.hpp` is the clean public interface to the parser. You
+should be able to add that into your regular include path no
+problem. The interface is roughly identical to the Python interface
+described above, using standard C++17 types. 
+
+In addition to the `parser::ParseNode` itself, this header exports the
+`parse()` and `dotify()` functions for parsing and visualizing
+trees.
+
+None of the internal types or machinery for the parser is
+exposed. Likewise, this file does not change with grammar changes
+(only lemon-py upgrades), so you only need to copy it from the
+generated files once.
+
+Note that the first line of the output header defines
+`LEMON_PY_SUPPRESS_PYTHON`, disabling inclusion of the `pybind11`
+headers and generation of the Python module interface. If you want the
+Python interface built as well, remove that line from the header, make
+sure `pybind11` is in your include path, and building `_parser.cpp`
+should generate basically identical object code to the regular
+`lempy_build` Python build.
+
+`_parser.cpp` is a self-contained implementation of the entire lexer,
+parser, and other internal doodads. You'll need to add that to your
+build's source files, updating it each time that you modify your
+grammar.
 
 
 # Deep Matter
