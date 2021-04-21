@@ -116,10 +116,10 @@ def decode_stringdef(tokname, code) -> str:
 
     flags = "StringScannerFlags::Default"
 
-    if '!' in special:
+    if '!' in special or 's' in special:
         flags += " | StringScannerFlags::SpanNewlines"
     
-    if '<' in special:
+    if 'j' in special:
         flags += " | StringScannerFlags::JoinAdjacent"
 
     return f"Lexer::add_string_def('{delim}', '{escape}', {tokname}, {flags});\n"

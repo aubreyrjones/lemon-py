@@ -5,8 +5,8 @@
 !whitespace :: \s
 !comment : //.*\n
 
-' ' \   := CHAR
-' " \ ! := STRING
+' ' \     := CHAR
+' " \ s j := STRING
 
 ADD := +
 SUB := -
@@ -18,7 +18,7 @@ COMMA := ,
 
 FLOAT_LIT : [0-9]+\.[0-9]+
 INT_LIT : [0-9]+
-FNCALL : ([_a-z][_a-z0-9]*)\s*\(
+FNCALL :: ([_a-z][_a-z0-9]*)\s*\(
 IDENT : [_a-z][_a-z0-9]*
 @endlex
 */

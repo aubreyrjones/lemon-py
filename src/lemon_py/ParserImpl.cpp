@@ -162,7 +162,7 @@ struct Token {
     */
     std::string toString() const {
         char outbuf[1024]; // just do the first 1k characters
-        snprintf(outbuf, 1024, "%s <%s>", name().c_str(), value().c_str());
+        snprintf(outbuf, 1024, "%s [line: %d] <%s>", name().c_str(), line, value().c_str());
         return std::string(outbuf);
     }
 
@@ -454,7 +454,20 @@ private:
 
         for (auto const& sdef : stringDefs) {
             if (auto matchedString = n(get<2>(sdef), get<0>(sdef), get<1>(sdef), get<3>(sdef))) {
-                return matchedString;
+                auto flags = get<3>(sdef);
+                if (flags & StringScannerFlags::JoinAdjacent) {
+                    std::stringstream retval;
+                    retval << matchedString.value().value();
+                    skip();
+                    while (auto anotherOne = n(get<2>(sdef), get<0>(sdef), get<1>(sdef), get<3>(sdef))) {
+                        retval << anotherOne.value().value(); // get the actual string value out, the first one's for the `optional`
+                        skip();
+                    }
+                    return make_token(matchedString.value().type, stringTable, retval.str(), line);
+                }
+                else {
+                    return matchedString;
+                }
             }
         }
 
