@@ -21,21 +21,19 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
+
+
+#include <ParseNode.hpp>
+
 #include <memory>
-#include <vector>
 #include <variant>
 #include <cstdint>
-#include <string>
-#include <optional>
 #include <unordered_map>
 #include <iostream>
 #include <regex>
 #include <tuple>
-#include <sstream>
 #include <cstdio>
 
-// these look like system header includes, but really it just expects everything in path
-#include <ParseNode.hpp>
 
 #ifndef LEMON_PY_SUPPRESS_PYTHON
 #include <concat_grammar.h>

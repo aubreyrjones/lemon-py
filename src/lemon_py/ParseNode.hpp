@@ -26,6 +26,8 @@ SOFTWARE.
 
 #include <string>
 #include <sstream>
+#include <optional>
+#include <vector>
 
 #ifndef LEMON_PY_SUPPRESS_PYTHON
 #include <pybind11/pybind11.h>
