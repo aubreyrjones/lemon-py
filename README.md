@@ -1,13 +1,16 @@
 Lemon Py
 --------
 
+[Project Homepage](https://github.com/aubreyrjones/lemon-py/)
+
 * [Prereqs](#Prereqs)
 * [Invocation](#Invocation)
 * [Generated Parser API](#Parser-Module-API)
 * [Module Directive](#Module-Definition)
 * [Lexer Definition](#Lexer-Definitions)
 * [Parser Definition](#Parser-Definition)
-* [C++](#C++)
+* [C++](#C)
+
 
 # Overview
 
@@ -136,9 +139,16 @@ on the `pybind11` PyPi module (not just headers installed to system
 include paths), and probably the `python3-dev` system package to get
 the `Python.h` header. Only standard C/C++ headers are used otherwise.
 
-You can install via `setup.py` and `pip3`, or just add `src` to your
-`PYTHONPATH`. [Note: That first part is currently lies. There's no
-setup. Hack your `PYTHONPATH`.]
+# Installing
+
+If you downloaded the source from github, you can install via 
+`python3 -m build` and `pip3 install`, or just add `src` to your 
+`PYTHONPATH`. You can also download an installable Python package
+from the releases page on github. Install that like 
+`pip3 install ./lemon-py.tar.gz`.
+
+I'm working on getting it on pypi, but my environment doesn't make
+`twine` happy for some reason.
 
 
 # Invocation
@@ -149,12 +159,12 @@ The following modules can be invoked from the command line using
 argument that will give usage information on the particular command
 and its options.
 
-* `lemon_py.BuildGrammar` - build a grammar file containing lemon-py
+* `lemon_py.BuildGrammar` (`lempy_build`) - build a grammar file containing lemon-py
   lexer definitions and Lemon grammar into a loadable python module,
   and (optionally/usually) install that to the current user's local
   python packages.
 
-* `lemon_py.Driver` - load a lemon-py parser module, parse a file into
+* `lemon_py.Driver` (`lempy`) - load a lemon-py parser module, parse a file into
   a tree, and perform basic operations like graphical tree
   visualization and JSON export.
 
@@ -908,34 +918,6 @@ compiler control library, but couldn't find one. Let me know if you
 have one. Maybe as part of SCons?
 
 
-Q. How do I use the native lexer+tree+parser framework independently
-of Python?
-
-A. The process is currently a bit ugly and manual. Use the `--debug
---noinstall` options when building the grammar to generate all
-intermediate and output files to the current working directory
-(instead of a tempdir). You'll need to edit the various includes and
-whatnot, but you should be able to untangle it. The public interface
-is defined in `ParseNode.hpp` inside the lemon-py directory, where you
-can also find `ParserImpl.cpp`.
-
-By default the generated Lemon grammar file _includes the `.cpp` file_
-in order to implement the lexer + parser environment. This makes it
-easier to build the Python module, but is probably not what you want
-for a nice clean C++ build.
-
-`#define LEMON_PY_SUPPRESS_PYTHON` will disable inclusion of
-`pybind11` and definition of python-related interfaces. This has some
-effects in both the header and implementation file, and you should
-probably not attempt to link a C++ program to a parser built as a
-Python module.
-
-The C++ header file defines the `parser` namespace, in which you can
-find the `ParseNode` implementation as well as `ParseNode
-parse_string(std::string const&)` and `std::string dotify(ParseNode
-const&)`.
-
-
 Q. Why doesn't lemon-py automatically write grammar actions?
 
 A. That sounds like a lot of work with relatively minimal gains.
@@ -951,6 +933,7 @@ operations is instead defined via some encoding of metavariable
 names. Parsing all that out sounds boring, and I remain entirely
 unconvinced that the result would be either more readable or more
 maintainable than the current approach.
+
 
 Q. Doesn't the use of `_` as a variable name violate some standard 
 or shadow some standard definition or something?
