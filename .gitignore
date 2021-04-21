@@ -9,3 +9,6 @@ src/lemon_py/lemon
 *egg-info*
 build
 dist
+
+test_grammars/ParseNode.hpp
+*_parser.cpp

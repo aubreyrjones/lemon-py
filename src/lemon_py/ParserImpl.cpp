@@ -262,7 +262,7 @@ struct PTNode {
     }
 };
 
-
+/** Flags for regex scanning. */
 struct RegexScannerFlags {
     const int v = 0;
 
@@ -273,6 +273,7 @@ struct RegexScannerFlags {
     RegexScannerFlags(int const& v) : v(v) {}
     RegexScannerFlags() = default;
 };
+
 
 /** Flags for configuring string scanning. */
 struct StringScannerFlags {
@@ -334,6 +335,7 @@ struct Lexer {
                           terminator ? 
                             std::make_optional(s2regex(terminator.value(), terminatorFlags))
                             : std::nullopt);
+        token_literal_value_map.emplace(tok_code, code);
     }
 
     /** Add a skip pattern to the lexer definition. */
@@ -347,8 +349,8 @@ struct Lexer {
     }
 
     /** Add a string definition to the lexer definition. */
-    static void add_string_def(char delim, char escape, int tok_code, bool spanNewlines) {
-        stringDefs.push_back(std::make_tuple(delim, escape, tok_code, spanNewlines));
+    static void add_string_def(char delim, char escape, int tok_code, StringScannerFlags flags = StringScannerFlags::Default) {
+        stringDefs.push_back(std::make_tuple(delim, escape, tok_code, flags & StringScannerFlags::SpanNewlines ? true : false));
     }
 
     using siter = std::string::const_iterator;
