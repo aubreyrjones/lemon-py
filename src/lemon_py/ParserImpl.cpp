@@ -72,6 +72,10 @@ namespace py = pybind11;
 
 namespace _parser_impl {
 
+// ==================== UTILITIES AND DECLARATIONS =======================
+
+
+//==================== TOKENS ==============================
 
 /** Used to intern strings found by the lexer. */
 class StringTable {
@@ -175,6 +179,9 @@ Token make_token(int type, StringTable & st, std::string const& s, int line) {
     return Token {type, st.pushString(s), &st, line};
 }
 
+
+//============================== LEXER IMPLEMENTATION =================================
+
 /**
  * This implements a recursive prefix tree, used to match literals in the lexer.
  * 
@@ -247,7 +254,7 @@ struct PTNode {
         // if we got here naturally, after searching children, it's because there was a match failure on the
         // suffix after this node. If we have a value, check the terminator and return.
         if (value && tryTerminator(first, last)) {
-                return std::make_tuple(value.value(), first);
+            return std::make_tuple(value.value(), first);
         }
 
         // no match, or the match is for an internal node with no value.
@@ -255,9 +262,40 @@ struct PTNode {
     }
 };
 
+
+struct RegexScannerFlags {
+    const int v = 0;
+
+    static constexpr auto Default = 0;
+    static constexpr auto CaseSensitive = 1; ///< This regex should be evaluated with case sensitivity enabled
+
+    operator int() const { return v; }
+    RegexScannerFlags(int const& v) : v(v) {}
+    RegexScannerFlags() = default;
+};
+
+/** Flags for configuring string scanning. */
+struct StringScannerFlags {
+    int v = 0;
+
+    static constexpr auto Default = 0;
+    static constexpr auto SpanNewlines = 1; ///< Strings of this type should allow internal newlines without error
+    static constexpr auto JoinAdjacent = 2;  ///< Strings of this type should be joined together _in the lexer_ when only skips occur between them
+
+    operator int() const { return v; }
+    StringScannerFlags(int const& v) : v(v) {}
+    StringScannerFlags() = default;
+};
+
 /** Convert a string into a case-insensitive, ECMA-flavored regex. */
-std::regex s2regex(std::string const& s) {
-    return std::regex(s, std::regex::icase | std::regex::ECMAScript);
+std::regex s2regex(std::string const& s, RegexScannerFlags const& flags) {
+    auto flagset = std::regex::ECMAScript;
+    if (!(flags & RegexScannerFlags::CaseSensitive)) {
+        flagset |= std::regex::icase;
+    }
+    
+
+    return std::regex(s, flagset);
 }
 
 /**
@@ -289,23 +327,23 @@ struct Lexer {
     /**
      * Add a literal/constant token, with an optional terminator pattern.
     */
-    static void add_literal(int tok_code, std::string const& code, std::optional<std::string> const& terminator = std::nullopt) {
+    static void add_literal(int tok_code, std::string const& code, std::optional<std::string> const& terminator = std::nullopt, RegexScannerFlags const& terminatorFlags = RegexScannerFlags::Default) {
         literals.add_value(
                           code, 
                           tok_code, 
                           terminator ? 
-                            std::make_optional(s2regex(terminator.value()))
+                            std::make_optional(s2regex(terminator.value(), terminatorFlags))
                             : std::nullopt);
     }
 
     /** Add a skip pattern to the lexer definition. */
-    static void add_skip(std::string const& r) {
-        skips.push_back(s2regex(r));
+    static void add_skip(std::string const& r, RegexScannerFlags const& flags = RegexScannerFlags::Default) {
+        skips.push_back(s2regex(r, flags));
     }
 
     /** Add a value pattern to the lexer definition. */
-    static void add_value_type(int tok_code, std::string const& r) {
-        valueTypes.push_back(std::make_tuple(s2regex(r), tok_code));
+    static void add_value_type(int tok_code, std::string const& r, RegexScannerFlags const& flags = RegexScannerFlags::Default) {
+        valueTypes.push_back(std::make_tuple(s2regex(r, flags), tok_code));
     }
 
     /** Add a string definition to the lexer definition. */
@@ -516,6 +554,10 @@ PTNode<int> Lexer::literals(0, std::nullopt, std::nullopt, true); // root node.
 decltype(Lexer::skips) Lexer::skips;
 decltype(Lexer::valueTypes) Lexer::valueTypes;
 decltype(Lexer::stringDefs) Lexer::stringDefs;
+
+
+//========================== PARSER STATE AND INTERNAL TREE ==============================
+
 
 struct ParseNode;
 
@@ -797,6 +839,8 @@ void GrammarActionParserHandle::success() { parser->success(); }
 
 } // namespace
 
+
+//========================= PUBLIC API IMPLEMENTATIONS ================================
 
 namespace parser {
 

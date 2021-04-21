@@ -2,7 +2,7 @@
 @pymod expr_parse
 
 @lexdef
-!whitespace : \s
+!whitespace :: \s
 !comment : //.*\n
 
 ' ' \   := CHAR

@@ -394,9 +394,11 @@ spaces.
 ## Values
  
 "value" tokens are defined by a regular expression, and are returned
-with both a token code and a text value. A single sub-match may be
-specified, and if present will be used to extract the sub-match as the
-token's value. No type conversions are applied, all values are
+with both a token code and a text value. By default the entire pattern
+match is returned as the value. A single sub-match may be specified,
+and if present the lexer will extract the sub-match as the token's
+value--the input matching the entire pattern is still consumed from
+the input stream. No type conversions are applied, all values are
 returned as strings.
 
 Value token patterns are checked in the same order they're specified

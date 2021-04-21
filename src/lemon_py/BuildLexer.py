@@ -22,6 +22,7 @@
 
 from typing import *
 import re
+import collections
 
 LEXER_START = \
 '''
@@ -39,12 +40,62 @@ LEXER_END = \
 
 '''
 
+TABBY = "      "
+
+INTRO_REGEX_REGEX = '\s+(:)[:]?\s+'
+
+
 def escape_backslash(s: str, extra: str = '"'):
     return s.replace('\\', '\\\\').replace(extra, '\\' + extra)
 
 
-def split_lex_line(l: str) -> Optional[Tuple[str, str]]:
-    pass # should probably implement and switch to this
+def scan_regex(s: str): # input should _not_ be stripped!
+    if not s or len(s) == 1: return None    # this is an empty string or a ':' by itself.
+    matchtype = s[0]
+    flags = ''
+    if matchtype == ':':
+        flags = 'RegexScannerFlags::CaseSensitive'
+        s = s[1:]
+    return (s.strip(), flags)
+
+
+def scan_literal(s: str):
+    if not s or len(s) == 1: return None   # this is an empty string or just a '=' by itself
+    
+    terminal_pattern_start = re.search(INTRO_REGEX_REGEX, s)
+    
+    if not terminal_pattern_start:  # just take everything as the search string
+        return (s[1:].strip(), None)
+    
+    stringlit = s[1:terminal_pattern_start.span(1)[0]].strip()
+    relit = s[terminal_pattern_start.span(1)[1]:]
+
+    terminator = scan_regex(relit)
+    
+    return (stringlit, terminator)
+
+def scan_lex_line(l: str):
+    l = l.strip()
+    if not l: return None
+
+    if l[0] == '!': # skip pattern marker
+        halves = re.split('\s+:', l, 1)
+        return ('skip', halves[0][1:].strip(), scan_regex(halves[1]))
+    elif l[0] == '\'': # stringdef marker
+        halves = l.rsplit(':=', 1)
+        return ('string', halves[0][1:].strip(), halves[1].strip())
+    else:
+        splitpoint = l.find(':') # find the first one (there could be a second in a literal)
+        tokname = l[0:splitpoint].strip()
+        if not tokname:
+            return None
+        matchtype = l[splitpoint + 1]
+        if matchtype == '=':
+            return ('literal', *scan_literal(l[splitpoint + 1:]))
+            pass #literal
+        else:
+            return ('value', *scan_regex(l[splitpoint + 1:]))
+        
 
 
 def extract_lexer_def(lemon_source: str) -> List[Tuple[str, str]]:
@@ -52,7 +103,10 @@ def extract_lexer_def(lemon_source: str) -> List[Tuple[str, str]]:
     if start < 0:
         raise RuntimeError("No lexer definition found.")
     end = lemon_source.find('@endlex', start)
-    lines = map(lambda s: tuple(s.strip().split(':', 1)), lemon_source[start:end].splitlines()[1:])
+    rawlines = lemon_source[start:end].splitlines()[1:]
+    for l in rawlines: print(scan_lex_line(l))
+
+    lines = map(lambda s: tuple(s.strip().split(':', 1)), rawlines)
     lines = filter(lambda t: len(t) == 2, lines)
     lines = list(map(lambda t: (t[0].strip(), t[1].strip()), lines))
     return lines
@@ -94,7 +148,6 @@ def map_token_name(token):
 
 
 def implement_lexer(lexer_def: List[Tuple[str, str]]) -> str:
-    TABBY = "      "
     retval = LEXER_START[:]
     retval += TABBY + 'token_name_map.emplace(0, "EOF");\n'
     retval += TABBY + 'token_literal_value_map.emplace(0, "<lexer eof>");\n\n'
