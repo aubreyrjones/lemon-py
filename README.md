@@ -14,8 +14,17 @@ Lemon Py
 
 # Overview
 
-This project wraps the Lemon parser generator. If you aren't sure what
-a parser generator is, this is maybe not something you need.
+This project augments the Lemon parser generator with a high-level
+parse tree interface, grammar action DSL, and an integrated,
+configurable lexer allowing the creation of an entire standalone,
+object-oriented parser from a single input grammar file. The entire
+parser is written in native C/C++, and the parser interface is made
+comfortably available to both C++ and Python3 applications.
+
+If you're unsure what this is for and if you need it, this is the
+first piece that a software compiler uses to understand input code. On
+its own, it is not a compiler or parser for any language, but allows
+you to (more) easily create parsers for use in your own projects.
 
 lemon-py provides facilities to compile a EBNF grammar and a lexer
 definition into a standalone native module for Python 3.x or (with a
@@ -687,7 +696,9 @@ should generate basically identical object code to the regular
 `_parser.cpp` is a self-contained implementation of the entire lexer,
 parser, and other internal doodads. You'll need to add that to your
 build's source files, updating it each time that you modify your
-grammar.
+grammar. Note that while this lemon-py parser _generation_ framework
+has some lazy system dependencies, the code *generated* by the
+framework should be platform-independent.
 
 
 # Deep Matter
