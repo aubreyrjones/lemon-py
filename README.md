@@ -27,22 +27,20 @@ its own, it is not a compiler or parser for any language, but allows
 you to (more) easily create parsers for use in your own projects.
 
 lemon-py provides facilities to compile a EBNF grammar and a lexer
-definition into a standalone native module for Python 3.x or (with a
-little work) C++ . The resulting lexer+parser is implemented entirely
-in native code, and has no external dependencies (including on this
-project or any Python code) and is suitable for use as a submodule in
-other projects.  You can just `import` it and run `parse()`.
+definition into a standalone parser. The resulting lexer+parser is
+implemented entirely in native code, and has no external dependencies
+(including on this project or any Python code) and is suitable for use
+as a submodule in other projects.  You can just `import` it and run
+`parse()`.
 
 lemon-py parsers output a uniformly-typed parse tree. All productions
 are identified by a string name, and all terminal values are returned
 by string as well--no type conversions are applied inside of the
-parser module. The returned parse tree has a convenient interface in
-both Python and modern C++, with the details of Lemon's proud legacy
-hidden away safely. One standout feature, available in both Python and
-C++, is (dependency-free) GraphViz `dot` output for graphical
-visualization of parse trees--essential for language development.
+parser module. One standout feature, available in both Python and C++,
+is (dependency-free) GraphViz `dot` output for graphical visualization
+of parse trees--essential for language development.
 
-lemon-py extends the Lemon parser generator with a built-in,
+lemon-py extends the Lemon parser definition format with a built-in,
 configurable lexer. The lexer handles commonly-encountered token types
 such as constant/literal character strings, case-insensitive regular
 expressions with captured value, and strings with user-defined
@@ -533,25 +531,29 @@ expr(e) ::= expr(c1) ADD(o) expr(c2).    { e = _("+", {c1, c2}, ~o); }
 ```
 
 The line above defines a grammar rule (preceding the `.`) with
-productions in lower-case and terminals in upper case (this
-distinction is mandatory for Lemon). The second half of the line, in
-curly brackets, defines a grammar action. It is the grammar action
-that we use to actually build the parse tree; without grammar actions,
-a lemon-py parser will always report failure, even if the input string
-matches the grammar. Each grammar action is called only when its rule
-matches the input, so there is no need to check any additional status.
+productions in lower-case and terminals in upper case. [Note: this
+case requirement applies only to the elements of the grammar rule, as
+Lemon uses this distinction to distinguish between terminal and
+non-terminal rules.]
 
-In addition to defining the production rule for a regular addition
+The second half of the line, in curly brackets, defines a grammar
+action. It is the grammar action that we use to actually build the
+parse tree; without grammar actions, a lemon-py parser will always
+report failure, even if the input string matches the grammar. Each
+grammar action is called only when its rule matches the input, so
+there is no need to check any additional status.
+
+In addition to defining the production rule for an algebraic addition
 expression, the line also defines "metavariables" (metavars) in
 parentheses after each of the elements of the production so that we
-can refer to the elements of the production within the action. It's
-not required to define a metavar for each element, but it _is_
-required to define a metavar for each element you wish to refer
-to. For instance, this production could omit the `(o)`, and instead
-draw line number information from the `c1` subexpression instead. You
-may name the metavars whatever you wish, except `_`, so long as it is
-a valid C identifier. You may assign metavars to both productions and
-teminals.
+can refer to the C objects within the action that represent the
+grammatical elements in the production. It's not required to define a
+metavar for each element, but it _is_ required to define a metavar for
+each element you wish to refer to. For instance, this production could
+omit the `(o)`, and instead draw line number information from the `c1`
+subexpression instead. You may name the metavars whatever you wish, in
+whatever case, so long as it is a valid C identifier--except `_`. You
+may assign metavars to both productions and teminals.
 
 ### Magic Variable `_` (underscore)
 
@@ -959,9 +961,10 @@ shadow.
 Historically, this project started out using `p` as the magic
 variable.  But as I polished the interface and documentation, it
 became apparent that people might like to use `p` as a metavar much
-more than as the magic constructor. At the point, the only improvement
-I'm planning is automatic conversion of token to parse node types, if
-I can figure out how _not_ to pass a `Parser*` to every `Token`.
+more than as the magic constructor. At this point, the only
+improvement I'm planning is automatic conversion of token to parse
+node types, and only if I can figure out how _not_ to pass a `Parser*`
+to every `Token`.
 
 
 
