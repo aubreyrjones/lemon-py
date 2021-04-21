@@ -120,10 +120,10 @@ public:
 };
 
 /** Stores mappings from logical token names to string representations. */
-std::unordered_map<int, std::string> token_name_map;
+static std::unordered_map<int, std::string> token_name_map;
 
 /** Stores mappings from logical literal token names to literal values. */
-std::unordered_map<int, std::string> token_literal_value_map;
+static std::unordered_map<int, std::string> token_literal_value_map;
 
 /**
  * This is the token value passed into the Lemon parser. It always has a type, 
@@ -442,8 +442,9 @@ private:
         auto n = [this] (int tokCode, char delim, char escape, StringScannerFlags flags) -> std::optional<Token> {
             if (*curPos == delim) { // if we get past this, we're either going to return a string token or exception out.
                 auto send = stringEnd(delim, escape, flags, curPos + 1, input.cend());
+                auto startLine = line;
                 auto sstart = advanceTo(send + 1); // move past the end delim
-                return make_token(tokCode, stringTable, std::string(sstart + 1, send), line);
+                return make_token(tokCode, stringTable, std::string(sstart + 1, send), startLine);
             }
             else { 
                 return std::nullopt;
@@ -463,7 +464,7 @@ private:
                         retval << anotherOne.value().value(); // get the actual string value out, the first one's for the `optional`
                         skip();
                     }
-                    return make_token(matchedString.value().type, stringTable, retval.str(), line);
+                    return make_token(matchedString.value().type, stringTable, retval.str(), matchedString.value().line);
                 }
                 else {
                     return matchedString;

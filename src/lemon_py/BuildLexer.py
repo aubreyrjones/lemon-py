@@ -22,7 +22,6 @@
 
 from typing import *
 import re
-import collections
 
 LEXER_START = \
 '''
@@ -52,6 +51,10 @@ def escape_backslash(s: str, extra: str = '"') -> str:
 def scan_regex(s: str) -> tuple: # input should _not_ be stripped!
     if not s or len(s) == 1: return None    # this is an empty string or a ':' by itself.
     matchtype = s[0]
+
+    if matchtype == '=':
+        raise RuntimeError("Literal definition (:=) where regex (:/::) expected.")
+
     flags = 'RegexScannerFlags::Default'
     if matchtype == ':':
         flags = 'RegexScannerFlags::CaseSensitive'

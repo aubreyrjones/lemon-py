@@ -27,28 +27,29 @@ its own, it is not a compiler or parser for any language, but allows
 you to (more) easily create parsers for use in your own projects.
 
 lemon-py provides facilities to compile a EBNF grammar and a lexer
-definition into a standalone parser. The resulting lexer+parser is
-implemented entirely in native code, and has no external dependencies
-(including on this project or any Python code) and is suitable for use
-as a submodule in other projects.  You can just `import` it and run
-`parse()`.
+definition into a standalone parser. The resulting lexer+parser has
+has no external dependencies (including on this project or any Python
+code) and is suitable for use as a submodule in other projects.  You
+can just ship it, `import` it, and run `parse()`. C++ users might
+like to read more about how to [include the parser in a native
+project.](#C)
 
-lemon-py parsers output a uniformly-typed parse tree. All productions
-are identified by a string name, and all terminal values are returned
-by string as well--no type conversions are applied inside of the
-parser module. One standout feature, available in both Python and C++,
-is (dependency-free) GraphViz `dot` output for graphical visualization
-of parse trees--essential for language development.
+lemon-py parsers output a uniformly-typed parse tree of `ParseNode`
+objects. All productions are identified by a string name, and all
+terminal values are returned by string as well--no type conversions
+are applied inside of the parser module. One standout feature,
+available in both Python and C++, is (dependency-free) GraphViz `dot`
+output for graphical visualization of parse trees--essential for
+language development.
 
 lemon-py extends the Lemon parser definition format with a built-in,
 configurable lexer. The lexer handles commonly-encountered token types
-such as constant/literal character strings, case-insensitive regular
-expressions with captured value, and strings with user-defined
-delimiter and escape characters. The lexer also supports user-defined
-"skip" patterns for omitting lexically-irrelevant characters. The
-lexer is not especially performant, but is implemented in an
-easily-extensible manner, allowing for easy expansion and
-customization.
+such as constant/literal character strings; regular expressions with
+optional case sensitivity and/or captured submatch; and configurable
+strings. The lexer also supports user-defined "skip" patterns for
+omitting lexically-irrelevant characters. The lexer is not especially
+performant, but it is intentionally implemented in a straightforward
+manner that can be easily understood and extended.
 
 lemon-py grammar files are essentially just regular [lemon grammar
 files](lemon/lemon.html) but include an extension to support automatic
@@ -58,6 +59,8 @@ A lexer and grammar definition for lemon py.
 
 ```
 /*
+expressions.lemon
+
 @pymod expr_parse
 
 @lexdef
@@ -113,7 +116,11 @@ expr(e) ::= CHAR(lit).                            { e = _(lit); }
 expr(e) ::= STRING(lit).                          { e = _(lit); }
 ```
 
-Which is compiled and installed like: `$ lempy_build expressions.lemon`.
+Which is compiled and installed like: 
+
+```
+$ lempy_build expressions.lemon
+````
 
 Which can be used from Python like:
 ```
@@ -137,14 +144,17 @@ Ignoring the very verbose JSON output, after rendering with `$ dot
 While the generated parser modules have no dependencies, this project
 _itself_ has several.
 
-Only unix-like operating systems are supported right now.
-
 Python 3.6+ required.
+
+Only unix-like operating systems are supported right now. All the
+important code is platform-agnostic, but the binary-building steps
+assume a POSIX system with `g++` on the path.
 
 lemon-py depends on `g++` supporting at least c++17. It also depends
 on the `pybind11` PyPi module (not just headers installed to system
 include paths), and probably the `python3-dev` system package to get
 the `Python.h` header. Only standard C/C++ headers are used otherwise.
+
 
 # Installing
 
@@ -155,53 +165,70 @@ from the releases page on github. Install that like
 `pip3 install ./lemon-py.tar.gz`.
 
 I'm working on getting it on pypi, but my environment doesn't make
-`twine` happy for some reason.
+`twine` happy for some reason. It's also not cross-platform, and I
+can't figure out how to red-list the right operating systems.
 
 
 # Invocation
 
 
-The following modules can be invoked from the command line using
-`python3 -m MOD ARGS...`. All of these modules support a `--help`
-argument that will give usage information on the particular command
-and its options.
+The following modules can be invoked from the command line directly by
+using `python3 -m MOD ARGS...`. If you've installed the packaged
+release, you'll also have access to short-form scripts that call these
+modules. All of these modules support a `--help` argument that will
+give usage information on the particular command and its options.
 
-* `lemon_py.BuildGrammar` (`lempy_build`) - build a grammar file containing lemon-py
-  lexer definitions and Lemon grammar into a loadable python module,
-  and (optionally/usually) install that to the current user's local
-  python packages.
+* [`lemon_py.BuildGrammar`] : `$ lempy_build [OPTIONS] path/to/grammar.lemon` -
+  build a grammar file containing lemon-py lexer definitions and Lemon
+  grammar into a loadable python module, and (optionally/usually)
+  install that to the current user's local python packages.
 
-* `lemon_py.Driver` (`lempy`) - load a lemon-py parser module, parse a file into
-  a tree, and perform basic operations like graphical tree
-  visualization and JSON export.
+  * `--terminals` - builds the grammar, and prints out a skeleton
+    lexer definition.
+
+  * `--debug` - instead of building intermediate files into a
+    temporary directory, drop the files into the current working
+    directory (but also still install the package).
+
+  * `--noinstall` - build the grammar, but skip the step where it's
+    installed to the user's path. Best used with `--debug`.
+
+  * `--cpp DIR` - instead of building a Python parser module, output
+    an implementation file and clean header into the indicated
+    directory.
+
+* [`lemon_py.Driver`] : `$ lempy [OPTIONS] parser_module path/to/input.txt` -
+  load a lemon-py parser module (not a raw grammar file), parse a file
+  into a tree (accepting the input or throwing error), and optionally
+  perform basic operations like graphical tree visualization and JSON
+  export.
+
+  * `--json` - dump the parse tree to the console in JSON format. Note
+    that this can easily be an _enormous_ amount of text, as parse
+    trees are highly redundant.
+
+  * `--dot output_file` - dump a GraphViz `dot` representation of the
+    parse tree into the given file. You can then render it with the
+    `dot` binary.
+
+  * `--vis` - if both `dot` and ImageMagick `display` are installed,
+    this command will automatically display the `dot`-rendered parse
+    tree.
 
 Build a grammar into a loadable module and place it in your personal
 site-packages path using the following command:
 
 ```
 # long form
-python3 -m lemon_py.BuildGrammar path/to/grammar.lemon
+$ python3 -m lemon_py.BuildGrammar path/to/grammar.lemon
 
-# shorter version (if `bin/` is in path)
-lempy_build path/to/grammar.lemon
+# shorter version (if you installed the package or `bin/` is in path)
+$ lempy_build path/to/grammar.lemon
 ```
 
 You can then load it in Python with `import MOD_NAME`, where
 `MOD_NAME` is whatever you configured with the `@pymod` directive
 inside the grammar file.
-
-You can also use `python3 -m lemon_py.Driver MOD_NAME path/to/input.txt`
-or `lempy MOD_NAME path/to/input.txt` to parse a
-file and run some basic operations on the resulting parse tree. One
-such option is `--vis`, which will run graphviz `dot` and ImageMagick
-`display` to visualize the parse tree (assuming those tools are
-installed). Another is `--json`, which will dump a JSON copy of the
-parse tree to the console.
-
-Convenience scripts for `BuildGrammar` and `Driver` are located in
-`bin/` and are called `lempy_build` and `lempy` respectively. Assuming
-the modules above are on your `PYTHONPATH` somehow, these scripts only
-need to be anywhere on your regular `PATH`.
 
 _____________________________________________________________________
 
@@ -325,32 +352,66 @@ inside a comment. Example:
 
 # Lexer Definitions
 
-
 An integrated lexer is one of lemon-py's labor-saving
 features. Without it, you would need to write a lexer for each target
 language. For the purposes of this (and only this) section, words like
 "returned" and "value" should be taken in the context of the internal
-lexer->parser interface used inside of grammar production
-rules.
+lexer->parser interface used inside of grammar production rules.
 
 Lexer definitions appear inside a comment block as a run of
-`token : pattern` definitions, one per line, starting on the line
-following `@lexdef` and continuing until `@endlex`. Note that these
-definition lines are _not_ removed from the grammar input to `lemon`,
-and so should always be inside a comment block. It's an error to
-define multiple `@lexdef` blocks, and only the first one will be used.
+definitions, one per line, starting on the line following `@lexdef`
+and continuing until `@endlex`. Note that these definition lines are
+_not_ removed from the grammar input to `lemon`, and so should always
+be inside a comment block. It's an error to define multiple `@lexdef`
+blocks, and only the first one will be used.
 
-Use `lemon_py.BuildGrammar --terminals` to output a skeleton lexer
-definition. This is derived from the header file declaring token codes
-output by `lemon`. You will want to replace the defined literal values
-with your own language's token literals, adjust terminator values and
-skips, and define value-type tokens as described below.
+Use `lempy_build --terminals` to output a skeleton lexer
+definition. This is derived from Lemon's analysis of the grammar
+definition, and is certain to include all terminals. You will want to
+replace the defined literal values with your own language's token
+literals, adjust terminator values and skips, and define value-type
+tokens as described below.
 
 The lexer itself is relatively basic. It handles two classes of tokens
 ("literal" and "value"), plus user-defined skip patterns and canonical
 string support. Declarations of different classes may be mixed in the
 `@lexdef` block, and the ordering rules discussed below apply only to
 the relative definition of different tokens of the _same class_.
+
+Note that whitespace is important as a delimeter in lexer definitions
+themselves (separating elements of the definition line itself), but
+leading and trailing whitespace is stripped from all definitions. It
+is not possible to directly write a literal whitespace character to
+match, nor is it possible to directly write a literal null character
+to match.
+
+
+## Regular Expressions
+
+Regular expressions occur in many places within the lexer definition.
+These are implemented using C++'s `std::regex`, set to the
+`ECMAScript` dialect. Check a C++ reference for the precise regex
+syntax supported.
+
+Regular expressions within lexer definitions may by either case
+sensitive, or case-insensitive. If the regular expression is
+introduced with `::` it is case sensitive, and if introduced with `:`
+it is case insensitive.  All places that regular expressions occur may
+be defined as either case sensitive or not. Where you see `:
+regular_expression` below, you could also write `::
+regular_expression` to match with case sensitivity.
+
+Leading and trailing whitespace is stripped from regular expressions,
+but internal whitespace is preserved. No extra escapes are required:
+e.g. for the whitespace class, write `\s`, **not** `\\s`.
+
+WARNING: regular expressions that match the null (empty) string will
+cause the lexer to enter an infinite loop. In the best case this looks
+like repeatedly emitting the same useless token until there's a parse
+error that throws an exception. But, especially for skip sequences,
+this can simply result in an infinite loop internal to the lexer's
+`next()` routine.
+
 
 ## Literals
 
@@ -363,18 +424,20 @@ will influence search order between disjoint literals). Literal tokens
 are returned by Lemon-defined code number, with a value equal to the
 original lexer configuration string.
 
-NOTE: leading/trailing whitespace is _not_ preserved on the right side
-of the definition, although internal whitespace is preserved. The
-definition string is subjected to `str.strip()` prior to codegen.
+NOTE: leading/trailing whitespace are stripped from the string
+literal, but internal whitespace is preserved.
 
-* Literal syntax: `TOKEN := literal_string`.
+Literal syntax: 
+```
+TOKEN := literal_string
+```
 
 Literal tokens have a higher priority than value tokens below, and so
 may erroneously consume the prefix of a value token. For instance,
 defining a literal matching `else` would consume the first part of a
-variable named `elsewhere`, generating a mis-parse or parse
-error. Reprioritizing values higher than literals would result in
-`else` lexing as an identifier in the above example.
+variable named `elsewhere`, generating a mis-parse or parse error. On
+the other hand, reprioritizing values higher than literals would
+result in keyword `else` lexing as an identifier in the above example.
 
 To solve this problem, literals may optionally be declared with a
 terminator pattern. The pattern is a regular expression which _must
@@ -383,13 +446,14 @@ match. The terminator characters themselves are _not consumed_ as
 input, but are only used as a lookahead check to aid in matching the
 literal.
 
-NOTE: The brain-dead parser for the lexer definitions splits the input
-on `:` surrounded by whitespace in order to find the terminator
-expression. This means you probably cannot define a terminator
-expression for a literal internally containing a `:` surrounded by
-spaces.
+NOTE: Due to how these lines are parsed, you cannot define a literal
+string that contains a `:` surrounded by white spaces. The right-hand
+side of that string will be treated as a terminator.
 
-* Literal syntax with terminator: `TOKEN := literal_string : regular_expression`
+Literal syntax with terminator: 
+```
+TOKEN := literal_string : regular_expression
+```
 
 ## Values
  
@@ -409,10 +473,10 @@ always eating the first part of a `FLOAT_LITERAL` (resulting in
 subsequent lex or parse errors), define the floating-point literal
 (with mandatory decimal point) _before_ the integer literal.
 
-NOTE: All regular expressions are currently matched *without* case
-sensitivity.
-
-* Value syntax: `TOKEN : regular_expression`.
+Value syntax: 
+```
+TOKEN : regular_expression
+```
 
 ## Skips
 
@@ -429,26 +493,40 @@ sensitivity.
 
 ## Strings
 
-Strings are handled by a set of internal functions that provide for
-escaping the delimiter (and escaping the escape by doubling it). The
-delimiter character, escape character, and token code are
-configurable. A string lexer definition is declared by starting the
-line with the `'` (single-quote) character. The next character is the
-string delimiter, and the subsequent character is the escape
-character.
+Strings are handled by a configurable internal function that properly
+handles escaping the delimiter and implements several common
+string-lexing idioms. The delimiter, escape character, and behavior
+are configurable for each string type you define.
 
-Finally, the special character `!` may appear as a third character,
-indicating that the string lexer should not treat reaching end of line
-before the end delimiter as an error. If the `!` is not specified, the
-lexer will automatically consider it an error for a string to cross a
-newline boundary--this is often desirable as it makes locating
-target-language syntax errors much easier.
+A string lexer definition is declared by starting the line with the
+`'` (single-quote) character. The next two characters are the
+mandatory delimiter character and escape character,
+respectively. Followed by optional control characters for special
+string behavior. Finally, the token type for the string is declared
+after the `:=`.
+
+String syntax: 
+```
+' DELIM ESCAPE [SPECIALS] := TOKEN
+```
+
+The following special characters are defined:
+
+* `s` or `!` - this type of string should span newlines. If **not**
+  set, the lexer automatically considers it an error for a string to
+  cross a newline boundary. This is usually desirable as it makes
+  error reporting much easier when the user forgets to close a
+  string. Set this character to disable the check and allow these
+  strings to freely pass over newlines.
+
+* `j` - join together adjacent occurrences of this string type. If
+  multiple strings of this type occur in a row, separated only by
+  skips, then all the strings will be joined together (without
+  delimiters) as if they were all declared within a single set of
+  delimeters.
 
 All whitespace in the delimiter definition is ignored, including
 between the delimiter and escape characters.
-
-Strings delimited by the given character are assigned the token code
-appearing to the right of the `:=` on the line.
 
 String values returned by the lexer _do not_ include the surrounding
 delimiters.
@@ -458,13 +536,24 @@ colon as a delimiter or escape.
 
 String syntax examples:
 
-* `' "\ := STR_TOK` - assign double-quote delimeted strings to
-  `STR_TOK`, and use the backslash as an escape character. (This is
-  mostly like normal C-style strings.)
+Assign double-quote delimeted strings to `STR_TOK`, use the backslash
+as an escape character, and join adjacent strings.  (This is mostly
+like normal C-style strings.)
 
-* `' @;! := DOC` - assign at-sign delimited strings to `DOC`, use the
-  semi-colon as an escape character, and freely pass over the newline
-  character. Something like:
+```
+' "\j := STR_TOK
+```
+
+Assign at-sign delimited strings to `DOC`, use the semi-colon as an
+escape character, and freely pass over the newline
+character.
+
+```
+' @;s := DOC
+```
+
+... which lexes strings that look like this:
+
 
 ```
 @look ;@ me 
@@ -501,12 +590,12 @@ for use inside the parser actions. These definitions make it
 relatively trivial to generate generic parse trees to represent
 anything Lemon can parse.
 
-_You may ignore memory management for nodes created using the
-interfaces described in this section_. All of these nodes are tracked
-by the internal `Parser` state, and any that go astray will be
-automatically freed when the parser completes or fails. This is one of
-the motivating features for this project, so please abuse it merily
-and report leaking `ParseNode` on github.
+**You may ignore memory management for nodes created using the
+interfaces described in this section**. All parse resources are
+tracked by the internal parser state, and anything that goes astray
+will be automatically freed when the parser completes or fails. This
+is one of the motivating features for this project, so please abuse it
+merily and report leaking `ParseNode` on github.
 
 You're on your own to manage memory for your own objects you create in
 grammar actions. lemon-py defines a `%default_destructor` for the
@@ -573,7 +662,7 @@ functions:
 _(production, children = {}, line = -1) -> node - create a new production node.
 ```
 
-* returns a newly-created interior parse node.
+* returns a newly-created non-terminal parse node.
 
 * `production` is a string name used for this node, often (but not
   always) derived from the actual grammar production left-hand side.
@@ -623,14 +712,16 @@ them:
   right-hand node as a child of the left-hand node, then returns the
   left-hand node.
 
-* Third, they define a `~` operator that reads the stored line number 
-  of an _existing_ node (it doesn't "figure out" the line, it just
-  copies through whatever you set in the node's constructor). This
-  operator also works on tokens.
+* Third, they define a prefix unary `~` (tilde) operator that reads
+  the stored line number of an _existing_ node. Note that it doesn't
+  "figure out" the line, it just copies through whatever was set in
+  the node's constructor. This operator also works on tokens, which
+  have a line number automatically set by the lexer.
 
 * Less frequently used is a subscript operator `node[{list, of,
-  nodes}]` that assigns all of the listed nodes as children (note the
-  curly-brackets around the list inside the square brackets).
+  children}]` that appends all of the listed nodes as children of
+  `node`, returning `node` (note the curly-brackets around the list
+  inside the square brackets).
 
 A canonical left-recursive list might look something like this:
 
@@ -639,6 +730,11 @@ arg_list(L) ::= .                                 { L = _("arglist"); }
 arg_list(L) ::= expr(c1).                         { L = _("arglist", {c1}, ~c1); }
 arg_list(L) ::= arg_list(L1) COMMA expr(e).       { L = L1 += e; }
 ```
+
+Note that attempting to read anything from the metavar node on the
+left-hand side of the production is (probably) a native memory access
+error. Don't do it.
+
 
 ### Setting the root node
 
@@ -893,80 +989,83 @@ syntax left me undeterred from finishing.
 # Anticipated Questions
 
 
-Q. Windows support?
+* Windows support?
 
-A. I have no idea how to easily, automatically compile a Python
-extension on Windows. I think we would need to output a VS project,
-and that's more than I want to deal with. Especially because I haven't
-written code on Windows in years. If you know how to do this, please
-submit a PR.
-
-
-Q. OSX support?
-
-A. Should be easily enough to make that work, but I do not have a
-Mac. Please submit a PR or Macbook.
+  * I have no idea how to easily, automatically compile a Python
+    extension on Windows. I think we would need to output a VS
+    project, and that's more than I want to deal with. Especially
+    because I haven't written code on Windows in years. If you know
+    how to do this, please submit a PR.
 
 
-Q. Why C++ instead of C?
+* OSX support?
 
-A. I like modern C++. I don't really like solving the same problems in
-boilerplate C.
-
-
-Q. Why C++17 instead of C++(`n < 17`)?
-
-A. I like modern C++. I don't really like solving the same problems in
-antique C++.
+  * Should be easily enough to make that work, but I do not have a
+    Mac. Please submit a PR or Macbook.
 
 
-Q. Why C++17 instead of C++(`n > 17`)?
+* Why C++ instead of C?
 
-A. System compiler support.
-
-
-Q. Why hardcode to `g++` instead of configurable compiler?
-
-A. It's good enough for me, and I don't need configurability as my
-system Python is built with `gcc`. I did look for a cross-platform
-compiler control library, but couldn't find one. Let me know if you
-have one. Maybe as part of SCons?
+  * I like modern C++. I don't really like solving the same problems
+    in boilerplate C.
 
 
-Q. Why doesn't lemon-py automatically write grammar actions?
+* Why C++17 instead of C++(`n < 17`)?
 
-A. That sounds like a lot of work with relatively minimal gains.
-
-The operator-overload DSL provided for use within grammar actions is
-as terse as permitted by C++ and my cleverness, while still providing
-full flexibility in parse tree structure. An automatic
-action-generation system would either impose unreasonably inflexible
-requirements on production structure (such as rigorously conventional
-naming). Or it would require that child-order and ellision information
-currently passed via function call argument order and assignment
-operations is instead defined via some encoding of metavariable
-names. Parsing all that out sounds boring, and I remain entirely
-unconvinced that the result would be either more readable or more
-maintainable than the current approach.
+  * I like modern C++. I don't really like solving the same problems
+    in antique C++.
 
 
-Q. Doesn't the use of `_` as a variable name violate some standard 
+* Why C++17 instead of C++(`n > 17`)?
+
+  * System compiler support.
+
+
+* Why hardcode to `g++` instead of configurable compiler?
+
+  * It's good enough for me, and I don't need configurability as my
+    system Python is built with `gcc`.
+
+    But I would **love** to have a cross-platform, cross-compiler
+    control library. I looked and couldn't find anything reasonably
+    self-contained. Please get in contact if you know of one.
+
+
+* Why doesn't lemon-py automatically write grammar actions?
+
+  * That sounds like a lot of work with relatively minimal gains.
+
+    The operator-overload DSL provided for use within grammar actions
+    is as terse as permitted by C++ and my cleverness, while still
+    providing full flexibility in parse tree structure. An automatic
+    action-generation system would either impose unreasonably
+    inflexible requirements on production structure (such as
+    rigorously conventional naming). Or it would require that
+    child-order and ellision information currently passed via function
+    call argument order and assignment operations is instead defined
+    via some encoding of metavariable names. Parsing all that out
+    sounds boring, and I remain entirely unconvinced that the result
+    would be either more readable or more maintainable than the
+    current approach.
+
+
+* Doesn't the use of `_` as a variable name violate some standard 
 or shadow some standard definition or something?
 
-A. I don't think so, I think it's just usually frowned on since it
-kinda disappears visually. The compiler doesn't complain at all, and
-while I'd tend to avoid names like that in general use... in the
-context of self-contained grammar actions for building a parse tree,
-there's nothing interesting I can think of that it's a problem to
-shadow.
+  * I don't think so. I think it's just usually frowned on since it
+    kinda disappears visually, which is an asset here. The compiler
+    doesn't complain at all, and while I'd tend to avoid names like
+    that in general use... in the context of self-contained grammar
+    actions for building a parse tree, there's nothing interesting I
+    can think of that it's a problem to shadow.
 
-Historically, this project started out using `p` as the magic
-variable.  But as I polished the interface and documentation, it
-became apparent that people might like to use `p` as a metavar much
-more than as the magic constructor. At this point, the only
-improvement I'm planning is automatic conversion of token to parse
-node types, and only if I can figure out how _not_ to pass a `Parser*`
-to every `Token`.
+    Historically, this project started out using `p` as the magic
+    variable.  But as I polished the interface and documentation, it
+    became apparent that people might like to use `p` as a metavar
+    much more than as the magic constructor. At this point, the only
+    improvement I'm planning is automatic conversion of token to parse
+    node types, and only if I can figure out how _not_ to pass a
+    `Parser*` to every `Token`.
 
 
 

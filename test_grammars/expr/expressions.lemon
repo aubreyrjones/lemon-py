@@ -2,7 +2,7 @@
 @pymod expr_parse
 
 @lexdef
-!whitespace :: \s
+!whitespace : \s
 !comment : //.*\n
 
 ' ' \     := CHAR
@@ -19,12 +19,13 @@ COMMA := ,
 FLOAT_LIT : [0-9]+\.[0-9]+
 INT_LIT : [0-9]+
 FNCALL :: ([_a-z][_a-z0-9]*)\s*\(
+MACRO :: ([_A-Z][_A-Z0-9]*)\s*\(
 IDENT : [_a-z][_a-z0-9]*
 @endlex
 */
 
 // token association, and implicit (ascending) priority
-%left COMMA FNCALL.
+%left COMMA FNCALL MACRO.
 %left ADD SUB.
 %left MUL DIV.
 
@@ -41,14 +42,18 @@ expr(e) ::= varref(e1).                           { e = e1; }
 varref(e) ::= IDENT(lit).                         { e = _("varref", {_(lit)}, ~lit); }
 
 expr(e) ::= fncall(e1).                           { e = e1; }
+expr(e) ::= macro(e1).                            { e = e1; }
 fncall(e) ::= FNCALL(lit1) arg_list(c2) R_PAREN.  { e = _("fncall", {_(lit1), c2}, ~lit1); }
+macro(e) ::= MACRO(lit1) arg_list(c2) R_PAREN.    { e = _("macro", {_(lit1), c2}, ~lit1); }
 
 arg_list(L) ::= .                                 { L = _("arglist"); }
 arg_list(L) ::= expr(c1).                         { L = _("arglist", {c1}, ~c1); }
 arg_list(L) ::= arg_list(L1) COMMA expr(e).       { L = L1 += e; }
+
 
 expr(e) ::= FLOAT_LIT(lit).                       { e = _(lit); }
 expr(e) ::= INT_LIT(lit).                         { e = _(lit); }
 
 expr(e) ::= CHAR(lit).                            { e = _(lit); }
 expr(e) ::= STRING(lit).                          { e = _(lit); }
+
