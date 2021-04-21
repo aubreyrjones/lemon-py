@@ -323,7 +323,7 @@ struct Lexer {
     static PTNode<int> literals;
     static std::vector<std::regex> skips;
     static std::vector<std::tuple<std::regex, int>> valueTypes; ///< regex pattern, token code
-    static std::vector<std::tuple<char, char, int, bool>> stringDefs; ///< delim, escape, token code, span newlines
+    static std::vector<std::tuple<char, char, int, StringScannerFlags>> stringDefs; ///< delim, escape, token code, span newlines
 
     /**
      * Add a literal/constant token, with an optional terminator pattern.
@@ -350,7 +350,7 @@ struct Lexer {
 
     /** Add a string definition to the lexer definition. */
     static void add_string_def(char delim, char escape, int tok_code, StringScannerFlags flags = StringScannerFlags::Default) {
-        stringDefs.push_back(std::make_tuple(delim, escape, tok_code, flags & StringScannerFlags::SpanNewlines ? true : false));
+        stringDefs.push_back(std::make_tuple(delim, escape, tok_code, flags));
     }
 
     using siter = std::string::const_iterator;
@@ -415,7 +415,7 @@ private:
     }
 
     /** Find the end of the string from the given start position. */
-    siter stringEnd(char stringDelim, char escape, bool spanNewlines, siter stringStart, siter end) {
+    siter stringEnd(char stringDelim, char escape, StringScannerFlags flags, siter stringStart, siter end) {
         for (; stringStart != end; ++stringStart) {
             if (*stringStart == escape) {
                 auto nextChar = stringStart + 1;
@@ -425,7 +425,7 @@ private:
                     continue;
                 }
             }
-            else if (!spanNewlines && (*stringStart == '\n')) {
+            else if (!(flags & StringScannerFlags::SpanNewlines) && (*stringStart == '\n')) {
                 throw make_error("Non-spanning string crossed newline.");
             }
             else if (*stringStart == stringDelim) {
@@ -439,9 +439,9 @@ private:
 
     /** Try all of the string definitions and attempt to get a string, returning nullopt if no string is possible. */
     std::optional<Token> nextString() {
-        auto n = [this] (int tokCode, char delim, char escape, bool span) -> std::optional<Token> {
+        auto n = [this] (int tokCode, char delim, char escape, StringScannerFlags flags) -> std::optional<Token> {
             if (*curPos == delim) { // if we get past this, we're either going to return a string token or exception out.
-                auto send = stringEnd(delim, escape, span, curPos + 1, input.cend());
+                auto send = stringEnd(delim, escape, flags, curPos + 1, input.cend());
                 auto sstart = advanceTo(send + 1); // move past the end delim
                 return make_token(tokCode, stringTable, std::string(sstart + 1, send), line);
             }
