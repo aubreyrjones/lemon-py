@@ -679,7 +679,7 @@ parse node. When used in this way, `_` acts like one of the following
 functions:
 
 ```
-_(production, children = {}, line = -1) -> node - create a new nonterminal node.
+_(production: str, children = {}, line = -1) -> node - create a new nonterminal node.
 ```
 
 * returns a newly-created non-terminal parse node.
@@ -702,7 +702,7 @@ _(production, children = {}, line = -1) -> node - create a new nonterminal node.
 There is a second variant of the `_` function:
 
 ```
-_(TOKEN) -> node - promote a lexer token to a parse node.
+_(token: Token) -> node - promote a lexer token to a parse node.
 ```
 
 This variant promotes a terminal/token value into a parse node. Since

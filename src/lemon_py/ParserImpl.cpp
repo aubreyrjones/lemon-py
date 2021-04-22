@@ -855,6 +855,10 @@ namespace parser {
  * Create a complete dot graph, rooted at the given ParseNode.
 */
 std::string dotify(ParseNode const& pn) {
+#ifndef LEMON_PY_SUPPRESS_PYTHON
+    py::gil_scoped_release _release_GIL;
+#endif
+    
     std::stringstream out;
 
     out << "digraph \"AST\" { \n";
@@ -907,6 +911,10 @@ ParseNode uplift_node(_parser_impl::ParseNode* alien) {
  * @throw std::runtime_error if there is a lex or parse error.
 */
 ParseNode parse_string(std::string const& input) {
+#ifndef LEMON_PY_SUPPRESS_PYTHON
+    py::gil_scoped_release _release_GIL;
+#endif
+
     using namespace _parser_impl;
     Parser p;
     return uplift_node(p.parseString(input));
