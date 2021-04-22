@@ -34,13 +34,6 @@ SOFTWARE.
 #include <tuple>
 #include <cstdio>
 
-
-#ifndef LEMON_PY_SUPPRESS_PYTHON
-#include <concat_grammar.h>
-#else // this next line is used by the C++ codegen aspect to inline macro definitions
-struct _to_be_replaced{};
-#endif
-
 // Forward declarations of types needed for Lemon function forward declarations
 // it's turtles all the way down when you've got no headers lol
 namespace _parser_impl {
@@ -943,4 +936,10 @@ PYBIND11_MODULE(PYTHON_PARSER_MODULE_NAME, m) {
     .def_readonly("id", &parser::ParseNode::id, "ID number for this node (unique within tree).")
     .def_readonly("attr", &parser::ParseNode::attr, "Free-use attributes dictionary.");
 }
+#endif
+
+#ifndef LEMON_PY_SUPPRESS_PYTHON
+#include <concat_grammar.h>
+#else // this next line is used by the C++ codegen aspect to inline token macro definitions
+struct _to_be_replaced{};
 #endif

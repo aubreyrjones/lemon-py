@@ -51,25 +51,29 @@ def bootstrap_lemon():
     subprocess.check_call(command)
 
 
+def read_all(filename: str):
+    with open(filename, 'r') as f:
+        return f.read()
+
+def replace_token_defines(impl_text, defines) -> str:
+    return impl_text.replace('struct _to_be_replaced{};\n', defines)
+
+def read_impl_and_replace_tokens():
+    impl_text = read_all(data_file("ParserImpl.cpp"))
+    defines = read_all('concat_grammar.h')  #this has to be in the cwd
+    return replace_token_defines(impl_text, defines)
 
 def copy_cpp_stuff(target_dir: str):
     if not os.path.isdir(target_dir):
         os.makedirs(target_dir)
 
-    disable_python = '#define LEMON_PY_SUPPRESS_PYTHON 1\n\n'
+    with open(os.path.join(target_dir, 'ParseNode.hpp'), 'w') as out:
+        out.write('#define LEMON_PY_SUPPRESS_PYTHON 1\n\n')
+        out.write(read_all(data_file("ParseNode.hpp")))
+    
+    parser_text = read_all('concat_grammar.c')
 
-    with open(data_file("ParseNode.hpp"), 'r') as pn:
-        with open(os.path.join(target_dir, 'ParseNode.hpp'), 'w') as out:
-            out.write(disable_python)
-            out.write(pn.read())
-    
-    with open('concat_grammar.c', 'r') as parser:
-        parser_text = parser.read()
-    
-    with open(data_file("ParserImpl.cpp"), 'r') as impl:
-        impl_text = impl.read()
-    with open('concat_grammar.h', 'r') as defines:
-        impl_text = impl_text.replace('struct _to_be_replaced{};\n', defines.read())
+    impl_text = read_impl_and_replace_tokens()
     
     with open(os.path.join(target_dir, "_parser.cpp"), 'w') as outimpl:
         outimpl.write(impl_text + parser_text)
