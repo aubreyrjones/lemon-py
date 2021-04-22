@@ -127,7 +127,10 @@ def _gpp_command(module_name: str):
     pylink = subprocess.check_output(['python3-config', '--ldflags']).decode().strip()
 
     retval = [cpp_COMPILER]
-    retval.extend('-O3 -Wall -shared -std=c++17 -fPIC -fvisibility=hidden'.split())
+    #retval.append('-O3')
+    retval.append('-g')
+    retval.append('-fno-inline')
+    retval.extend('-Wall -shared -std=c++17 -fPIC -fvisibility=hidden'.split())
     retval.extend(pyinclude.split())
     retval.extend(pylink.split())
     retval.extend([
@@ -253,6 +256,7 @@ if __name__ == '__main__':
     import argparse
     ap = argparse.ArgumentParser(description="Build a grammar and optionally install it to the python path.")
     ap.add_argument('--cpp', type=str, required=False, help="Specify to output C++ compatible files to the indicated directory. Disables building the Python module.")
+    ap.add_argument('--locale', type=str, required=False, help="Force the lexer initialization routine to also enforce a specific _global_ C++ locale. Note that this can have far-ranging effects in a locale-sensitive codebase.")
     ap.add_argument('--terminals', default=False, const=True, action='store_const', help="Print a skeleton `@lexdef` including all grammar-defined terminals.")
     ap.add_argument('--debug', default=False, const=True, action='store_const', help="Don't use a temp directory, dump everything in cwd.")
     ap.add_argument('--noinstall', default=False, const=True, action='store_const', help="Don't install the language, most useful with --debug.")

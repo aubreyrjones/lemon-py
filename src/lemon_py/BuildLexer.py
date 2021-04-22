@@ -133,15 +133,15 @@ def implement_lexdef_line(lexdef: tuple) -> str:
     tokname = lexdef[1]
     if kind == 'skip':
         skipre = lexdef[2]
-        retval += f"Lexer::add_skip(\"{skipre[0]}\", {skipre[1]});\n"
+        retval += f"Lexer::add_skip(u8\"{skipre[0]}\", {skipre[1]});\n"
     elif kind == 'value':
-        retval += f"Lexer::add_value_type({tokname}, \"{lexdef[2]}\", {lexdef[3]});\n"
+        retval += f"Lexer::add_value_type({tokname}, u8\"{lexdef[2]}\", {lexdef[3]});\n"
     elif kind == 'literal':
         if lexdef[3]:
             termre = lexdef[3]
-            retval += f"Lexer::add_literal({tokname}, \"{lexdef[2]}\", \"{termre[0]}\", {termre[1]});\n"
+            retval += f"Lexer::add_literal({tokname}, u8\"{lexdef[2]}\", u8\"{termre[0]}\", {termre[1]});\n"
         else:
-            retval += f"Lexer::add_literal({tokname}, \"{lexdef[2]}\");\n"
+            retval += f"Lexer::add_literal({tokname}, u8\"{lexdef[2]}\");\n"
     elif kind == 'string':
         retval += decode_stringdef(lexdef[1], lexdef[2])
     

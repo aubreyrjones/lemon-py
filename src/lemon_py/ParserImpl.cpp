@@ -33,6 +33,7 @@ SOFTWARE.
 #include <regex>
 #include <tuple>
 #include <cstdio>
+#include <locale>
 
 // Forward declarations of types needed for Lemon function forward declarations
 // it's turtles all the way down when you've got no headers lol
@@ -65,6 +66,9 @@ namespace _parser_impl {
 
 // ==================== UTILITIES AND DECLARATIONS =======================
 
+#ifndef LEMON_PY_OVERRIDE_LOCALE
+constexpr auto LEMON_PY_LOCALE = "en_US.UTF-8";
+#endif
 
 //==================== TOKENS ==============================
 
@@ -281,13 +285,16 @@ struct StringScannerFlags {
 
 /** Convert a string into a case-insensitive, ECMA-flavored regex. */
 std::regex s2regex(std::string const& s, RegexScannerFlags const& flags) {
+    //static auto locale = std::locale(LEMON_PY_LOCALE);
+
     auto flagset = std::regex::ECMAScript;
     if (!(flags & RegexScannerFlags::CaseSensitive)) {
         flagset |= std::regex::icase;
     }
     
+    auto retval = std::regex(s, flagset);
 
-    return std::regex(s, flagset);
+    return std::move(retval);
 }
 
 /**
@@ -544,6 +551,7 @@ public:
 
     /** Get a portion of the input after the current position, used for error reporting. */
     std::string remainder(size_t len = 0) {
+        //return std::string(curPos - 1, input.cend()); // DEBUG ONLY!!!!!
         return std::string(curPos, len && (curPos + len < input.cend()) ? (curPos + len) : input.cend());
     }
 
