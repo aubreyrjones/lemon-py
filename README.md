@@ -916,13 +916,26 @@ your machine. I've been programming for 25+ years now have have _only_
 run out of stack when there's been an error causing infinite
 recursion.
 
-lemon-py is also probably unsuitable for parsing binary or unicode
-streams. The underlying Lemon parsers are fully capable of working
-with anything you can tokenize, but the lemon-py lexer implementation
-is basically character-oriented and currently limited to 8-bit ASCII
-text. Support for unicode could be accomplished with relatively
-straightforward enhancements to the lexer, but I don't know about
-`std::regex` on binary strings.
+## Unicode and Binary Support
+
+I am working on unicode support. You can track my efforts in the
+`unicode` branch on github. These are not going well.
+
+The parser doesn't care about unicode or binary or any kind of
+encoding. The problem is the lexer.
+
+For initial support, I started of course with `std::string`. This
+often works pretty well with UTF-8 unicode data.
+
+The literal and string lexers are binary-clean, meaning they work
+equally well for binary and UTF-8 sequences as they do for ASCII
+sequences (although only ascii characters work as string
+delimiters/escapes).
+
+lemon-py relies on the C++ `std::regex` facility throughout the
+lexer. That doesn't work so hot in utf-8.
+
+I'm working on switching to allow wide character support at minimum.
 
 
 ## Motivation and Alternatives
