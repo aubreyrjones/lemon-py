@@ -30,12 +30,12 @@ lemon-py provides facilities to compile a EBNF grammar and a lexer
 definition into a standalone parser. The resulting lexer+parser has
 has no external dependencies (including on this project or any Python
 code) and is suitable for use as a submodule in other projects.  You
-can just ship it, `import` it, and run `parse()`. C++ users might
-like to read more about how to [include the parser in a native
+can just ship it, `import` it, and run `parse()`. C++ users might like
+to read more about how to [include the parser in a native
 project.](#C)
 
 lemon-py parsers output a uniformly-typed parse tree of `ParseNode`
-objects. All productions are identified by a string name, and all
+objects. All nonterminals are identified by a string name, and all
 terminal values are returned by string as well--no type conversions
 are applied inside of the parser module. One standout feature,
 available in both Python and C++, is (dependency-free) GraphViz `dot`
@@ -53,9 +53,9 @@ manner that can be easily understood and extended.
 
 lemon-py grammar files are essentially just regular [lemon grammar
 files](lemon/lemon.html) but include an extension to support automatic
-lexer generation. 
+lexer generation.
 
-A lexer and grammar definition for lemon py.
+A lexer and grammar definition for lemon-py.
 
 ```
 /*
@@ -178,7 +178,6 @@ can't figure out how to red-list the right operating systems.
 
 
 # Invocation
-
 
 The following modules can be invoked from the command line directly by
 using `python3 -m MOD ARGS...`. If you've installed the packaged
@@ -303,19 +302,19 @@ for the same structures.
 
 `ParseNode` instances have the following read-only members:
 
-* `.production: str` - the user-defined production name, or `None` if
-  the node represents a terminal/token.
+* `.production: str` - the user-defined production/nonterminal name,
+  or `None` if the node represents a terminal/token.
 
 * `.type: str` - the Lemon-defined token name, or `None` if the node
-  represents a production.
+  represents a nonterminal.
 
-* `.value: str` - the lexer-extracted string value for a value token. For
-  literal tokens, the original lexer input string. `None` for
-  productions.
+* `.value: str` - the lexer-extracted string value for a value
+  token. For literal tokens, the original lexer input string. `None`
+  for nonterminals.
 
 * `.c: Sequence[ParseNode]` - the children of this node. In a typical,
   well-formed parse tree, all leaves are terminals and all internal
-  nodes are productions. Nothing in Lemon or lemon-py enforces this,
+  nodes are nonterminals. Nothing in Lemon or lemon-py enforces this,
   however, and grammar actions are free to add children to nodes
   representing terminals.
 
@@ -324,8 +323,8 @@ for the same structures.
   terminals are automatically annotated by the lexer with the
   approximate line number, so parse nodes created directly from
   `Token` values will automatically have a line number attached. Parse
-  nodes created with a production name must have their line number set
-  within the grammar action; this does not happen automatically.
+  nodes created with a nonterminal name must have their line number
+  set within the grammar action; this does not happen automatically.
 
 * `.id: int` - an identifier for this node guaranteed to be unique
   within a single tree. These are assigned in pre-order.
@@ -644,7 +643,7 @@ expr(e) ::= expr(c1) ADD(o) expr(c2).    { e = _("+", {c1, c2}, ~o); }
 ```
 
 The line above defines a grammar rule (preceding the `.`) with
-productions in lower-case and terminals in upper case. [Note: this
+nonterminals in lower-case and terminals in upper case. [Note: this
 case requirement applies only to the elements of the grammar rule, as
 Lemon uses this distinction to distinguish between terminal and
 non-terminal rules.]
@@ -666,11 +665,11 @@ each element you wish to refer to. For instance, this production could
 omit the `(o)`, and instead draw line number information from the `c1`
 subexpression instead. You may name the metavars whatever you wish, in
 whatever case, so long as it is a valid C identifier--except `_`. You
-may assign metavars to both productions and teminals.
+may assign metavars to both nonterminals and teminals.
 
 ### Magic Variable `_` (underscore)
 
-lemon py causes every grammar action automatically to include the
+lemon-py causes every grammar action automatically to include the
 special variable `_` (underscore). This is a handle for the parser state, 
 and is used to interact with the lemon-py parse tree system. 
 Leaving aside the interior details of how it's implemented, 
@@ -681,7 +680,7 @@ parse node. When used in this way, `_` acts like one of the following
 functions:
 
 ```
-_(production, children = {}, line = -1) -> node - create a new production node.
+_(production, children = {}, line = -1) -> node - create a new nonterminal node.
 ```
 
 * returns a newly-created non-terminal parse node.
@@ -837,7 +836,7 @@ input file itself.
 A number of seemingly-weird decisions in the C++ widgetry are the
 result of adapting to the Lemon grammar action
 environment. Critically, Lemon puts the token type and the type of
-every production rule into a single giant C `union`. This means they
+every nonterminal rule into a single giant C `union`. This means they
 must be trivial types, which eliminates the direct use of smart
 pointers or containers to manage memory within grammar
 actions. Instead, the lemon-py `_parser_impl::Parser` object
