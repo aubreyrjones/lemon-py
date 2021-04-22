@@ -27,63 +27,107 @@ import os
 import pybind11
 import site
 import shutil
+import sys
 
 from .BuildLexer import make_lexer
 
-def data_file(*filename: str):
+__all__ = ['build_lempy_grammar']
+
+def _data_file(*filename: str):
     return os.path.join(os.path.abspath(os.path.dirname(__file__)), *filename)
+
+_system_default_cc = 'gcc'
+_system_default_cxx = 'g++'
+
+# if sys.platform == 'win32':
+#     _system_default_cc = 'cl'
+#     _system_default_cxx = 'cl'
+
+if sys.platform == 'darwin':
+    _system_default_cc = 'clang'
+    _system_default_cxx = 'clang++'    
+
+c_COMPILER = _system_default_cc if 'CC' not in os.environ else os.environ['CC']
+cpp_COMPILER = _system_default_cxx if 'CXX' not in os.environ else os.environ['CXX']
 
 # this is the text injected to include the implementation
 IMPL_TEXT = "\n#include <ParserImpl.cpp> // include the implementation file \n\n"
+
+# for C++, we just rewrite everything into one giant file, so this can be null
 CPP_IMPL_TEXT = "\n"
 
 
-GRAMMAR_HEADER_FILE = data_file("header.lemon")
-LEMON = data_file("lemon")
-LEMON_TEMPLATE = data_file("lempar.c")
+GRAMMAR_HEADER_FILE = _data_file("header.lemon")
+LEMON = _data_file("lemon")
+LEMON_TEMPLATE = _data_file("lempar.c")
 
-def bootstrap_lemon():
-    if os.path.isfile(data_file('lemon')):
+def _bootstrap_lemon():
+    '''
+    Build the `lemon` executable if it doesn't already exist.
+    '''
+    if os.path.isfile(_data_file('lemon')):
         return
     
     print("Bootstrapping `lemon`.")
-    command = ['gcc', '-O2', '-o', data_file('lemon'), data_file('lemon.c')]
+    command = [c_COMPILER, '-O2', '-o', _data_file('lemon'), _data_file('lemon.c')]
     subprocess.check_call(command)
 
 
-def read_all(filename: str):
+def _read_all(filename: str):
+    '''
+    Open and read a whole file.
+    '''
     with open(filename, 'r') as f:
         return f.read()
 
-def replace_token_defines(impl_text, defines) -> str:
+
+def _replace_token_defines(impl_text, defines) -> str:
+    '''
+    Replace the special sentinel struct with the token definitions.
+    '''
     return impl_text.replace('struct _to_be_replaced{};\n', defines)
 
-def read_impl_and_replace_tokens():
-    impl_text = read_all(data_file("ParserImpl.cpp"))
-    defines = read_all('concat_grammar.h')  #this has to be in the cwd
-    return replace_token_defines(impl_text, defines)
 
-def copy_cpp_stuff(target_dir: str):
+def _read_impl_and_replace_tokens():
+    '''
+    Read in the implementation file from the package dir, and the header
+    from the current dir. Inline the token defs and return.
+    '''
+    impl_text = _read_all(_data_file("ParserImpl.cpp"))
+    defines = _read_all('concat_grammar.h')  #this has to be in the cwd
+    return _replace_token_defines(impl_text, defines)
+
+
+def _copy_cpp_stuff(target_dir: str):
+    '''
+    Assuming the current dir has a complete, post `lemon` build,
+    this will copy a build-ready header and implementation to the
+    indicated director.
+    '''
     if not os.path.isdir(target_dir):
         os.makedirs(target_dir)
 
     with open(os.path.join(target_dir, 'ParseNode.hpp'), 'w') as out:
         out.write('#define LEMON_PY_SUPPRESS_PYTHON 1\n\n')
-        out.write(read_all(data_file("ParseNode.hpp")))
+        out.write(_read_all(_data_file("ParseNode.hpp")))
     
-    parser_text = read_all('concat_grammar.c')
+    parser_text = _read_all('concat_grammar.c')
 
-    impl_text = read_impl_and_replace_tokens()
+    impl_text = _read_impl_and_replace_tokens()
     
     with open(os.path.join(target_dir, "_parser.cpp"), 'w') as outimpl:
         outimpl.write(impl_text + parser_text)
 
 
-def gpp_command(module_name: str):
+def _gpp_command(module_name: str):
+    '''
+    Create a command to build the parser in the current directory.
+    '''
     pyinclude = subprocess.check_output(['python3-config', '--includes']).decode().strip()
     pylink = subprocess.check_output(['python3-config', '--ldflags']).decode().strip()
 
-    retval = list('g++ -O3 -Wall -shared -std=c++17 -fPIC -fvisibility=hidden'.split())
+    retval = [cpp_COMPILER]
+    retval.extend('-O3 -Wall -shared -std=c++17 -fPIC -fvisibility=hidden'.split())
     retval.extend(pyinclude.split())
     retval.extend(pylink.split())
     retval.extend([
@@ -96,17 +140,15 @@ def gpp_command(module_name: str):
         "-o",
         f"{module_name}.so"
     ])
-    
-
     return retval
 
-def read_grammar_source(grammar_file_path: str):
-    with open(os.path.abspath(grammar_file_path), 'r') as f:
-        grammar_text = f.read()
-    return grammar_text
 
-
-def concatenate_input(grammar_text: str, impl_text: str):
+def _concatenate_input(grammar_text: str, impl_text: str):
+    '''
+    Build the whole grammar input file for lemon. This has
+    the real grammar text, the codegen'd lexer init, and
+    the `header.lemon` contents.
+    '''
     with open(GRAMMAR_HEADER_FILE, 'r') as f:
         header_text = f.read()
 
@@ -118,64 +160,82 @@ def concatenate_input(grammar_text: str, impl_text: str):
     return whole_text
 
 
-def write_lemon_input(whole_text: str, grammar_module_name: str):
+def _write_lemon_input(whole_text: str, grammar_module_name: str):
+    '''
+    Write the input and call lemon to process it.
+    '''
     with open('concat_grammar.lemon', 'w') as f:
         f.write(whole_text)
     subprocess.call([LEMON, f"-T{LEMON_TEMPLATE}", "concat_grammar.lemon"]) # f"-d{str(workdir)}",
 
 
 def write_and_build_curdir(whole_text: str, grammar_module_name: str):
-    write_lemon_input(whole_text, grammar_module_name)
+    '''
+    Output the augmented grammar, run `lemon`, and build the results with the C++ compiler.
+    '''
+    _write_lemon_input(whole_text, grammar_module_name)
     
-    subprocess.call(gpp_command(grammar_module_name))
+    subprocess.call(_gpp_command(grammar_module_name))
 
 
-def extract_module(text: str):
+def _extract_module(text: str):
+    '''
+    Get the @pymod name out of the text.
+    '''
+    BAD_NAME = "lemon_derived_parser_with_an_obnoxiously_long_name"  # that oughta lern 'em not to put a @pymod
+
     start = text.find('@pymod') # should look like maybe "//@pymod  \t foo_parser   "
     if start < 0:
-        return "lemon_derived_parser" # that oughta lern 'em not to put a @pymod
+        return BAD_NAME
     
     end = text.find("\n", start)
 
     linesplit = text[start:end].split()
     if len(linesplit) < 2:
-        return "lemon_derived_parser"
+        return BAD_NAME
     return linesplit[1].strip()
 
-def lexdef_skeleton(tokname: str):
+
+def _lexdef_skeleton(tokname: str):
+    '''
+    Output a trivial lexdef for the given token.
+    '''
     justlen = 16 - len(tokname)
     return tokname + ":=".rjust(justlen) + " " + tokname.lower() + ":".rjust(justlen) + " [^\w_]"
 
 
 def print_lang_header():
+    '''
+    Print out a list of all the token names that were defined by the grammar being built.
+    '''
     with open('concat_grammar.h', 'r') as header_file:
         print("/*\n@pymod unnamed_language\n\n@lexdef\n\n!whitespace : \s+\n")
-        lines = map(lambda l: lexdef_skeleton(l.split()[1].strip()), header_file.readlines())
+        lines = map(lambda l: _lexdef_skeleton(l.split()[1].strip()), header_file.readlines())
 
         print("\n".join(lines))
         print("@endlex\n*/")
 
 
 def build_lempy_grammar(grammar_file_path: str, install = False, use_temp = True, print_terminals = False, cpp_dir = None):
-    bootstrap_lemon()
+    _bootstrap_lemon()
 
     grammar_file_path = os.path.abspath(grammar_file_path)
     print("Compiling: " + grammar_file_path)
     
     old_dir = os.path.abspath(os.curdir)
 
-    grammar_text = read_grammar_source(grammar_file_path)
-    grammar_module_name = extract_module(grammar_text)
+    grammar_text = _read_all(grammar_file_path)
+    grammar_module_name = _extract_module(grammar_text)
 
-    concatenated_text = concatenate_input(grammar_text, CPP_IMPL_TEXT if cpp_dir else IMPL_TEXT)
+    concatenated_text = _concatenate_input(grammar_text, CPP_IMPL_TEXT if cpp_dir else IMPL_TEXT)
 
     with tempfile.TemporaryDirectory() as workdir:
         if use_temp:
             os.chdir(workdir)
 
         if cpp_dir:
-            write_lemon_input(concatenated_text, grammar_module_name)
-            copy_cpp_stuff(cpp_dir)
+            _write_lemon_input(concatenated_text, grammar_module_name)
+            _copy_cpp_stuff(cpp_dir)
         else:
             write_and_build_curdir(concatenated_text, grammar_module_name)
             if install:

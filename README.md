@@ -148,12 +148,20 @@ Python 3.6+ required.
 
 Only unix-like operating systems are supported right now. All the
 important code is platform-agnostic, but the binary-building steps
-assume a POSIX system with `g++` on the path.
+assume a POSIX system C/C++ compiler that's command-line compatible
+with `gcc`.
 
-lemon-py depends on `g++` supporting at least c++17. It also depends
-on the `pybind11` PyPi module (not just headers installed to system
-include paths), and probably the `python3-dev` system package to get
-the `Python.h` header. Only standard C/C++ headers are used otherwise.
+lemon-py depends on the C++ compiler supporting at least c++17. It
+also depends on the `pybind11` PyPi module (not just headers installed
+to system include paths), and probably the `python3-dev` system
+package to get the `Python.h` header. Only standard C/C++ headers are
+used otherwise.
+
+On Ubuntu you can probably get everything you need from:
+
+```
+$ sudo apt install build-essential python3-dev
+```
 
 
 # Installing
@@ -229,6 +237,20 @@ $ lempy_build path/to/grammar.lemon
 You can then load it in Python with `import MOD_NAME`, where
 `MOD_NAME` is whatever you configured with the `@pymod` directive
 inside the grammar file.
+
+
+## Setting C/C++ Compiler
+
+lemon-py internally uses your system's C compiler to bootstrap the
+`lemon` executable, and then the C++ compiler each time you rebuild a
+target grammar. 
+
+lemon-py will first check for the `CC` and `CXX` environment
+variables, to set the C and C++ compilers respectively.
+
+If not set via environment, lemon-py uses `clang` on MacOS and
+`gcc`/`g++` everywhere else.
+
 
 _____________________________________________________________________
 
@@ -988,7 +1010,6 @@ syntax left me undeterred from finishing.
 
 # Anticipated Questions
 
-
 * Windows support?
 
   * I have no idea how to easily, automatically compile a Python
@@ -1000,8 +1021,9 @@ syntax left me undeterred from finishing.
 
 * OSX support?
 
-  * Should be easily enough to make that work, but I do not have a
-    Mac. Please submit a PR or Macbook.
+  * Probably-maybe it works? I haven't tested it. I don't have a
+    Mac. It really comes down to whether or not lemon-py can find a
+    compiler.
 
 
 * Why C++ instead of C?
@@ -1019,16 +1041,6 @@ syntax left me undeterred from finishing.
 * Why C++17 instead of C++(`n > 17`)?
 
   * System compiler support.
-
-
-* Why hardcode to `g++` instead of configurable compiler?
-
-  * It's good enough for me, and I don't need configurability as my
-    system Python is built with `gcc`.
-
-    But I would **love** to have a cross-platform, cross-compiler
-    control library. I looked and couldn't find anything reasonably
-    self-contained. Please get in contact if you know of one.
 
 
 * Why doesn't lemon-py automatically write grammar actions?
@@ -1052,12 +1064,8 @@ syntax left me undeterred from finishing.
 * Doesn't the use of `_` as a variable name violate some standard 
 or shadow some standard definition or something?
 
-  * I don't think so. I think it's just usually frowned on since it
-    kinda disappears visually, which is an asset here. The compiler
-    doesn't complain at all, and while I'd tend to avoid names like
-    that in general use... in the context of self-contained grammar
-    actions for building a parse tree, there's nothing interesting I
-    can think of that it's a problem to shadow.
+  * Nope. As far as I can tell, it's reserved at global scope, but not
+    at function scope.
 
     Historically, this project started out using `p` as the magic
     variable.  But as I polished the interface and documentation, it

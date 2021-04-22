@@ -64,7 +64,7 @@ if __name__ == '__main__':
     ap.add_argument('--dot', type=str, help="Dot output file.")
     ap.add_argument('--json', default=False, const=True, action='store_const', help="Dump a JSON representation of the tree to the console.")
     ap.add_argument('language', type=str, help="Language module name to use.")
-    ap.add_argument('input_file', type=str, help="Input file to parser.")
+    ap.add_argument('input_file', type=str, help="Input file to parser. Specify `0` (zero) to accept input from stdin.")
     args = ap.parse_args()
 
     d = Driver(args.language)
