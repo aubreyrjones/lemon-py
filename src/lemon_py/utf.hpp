@@ -667,6 +667,21 @@ namespace utf8
         return result;
     }
 
+    inline std::string utf32to8(const std::wstring& s)
+    {
+        std::string result;
+        utf32to8(s.begin(), s.end(), std::back_inserter(result));
+        return result;
+    }
+
+    inline std::wstring utf8toW(const std::string& s)
+    {
+        std::wstring result;
+        utf8to32(s.begin(), s.end(), std::back_inserter(result));
+        return result;
+    }
+
+
     inline std::size_t find_invalid(const std::string& s)
     {
         std::string::const_iterator invalid = find_invalid(s.begin(), s.end());

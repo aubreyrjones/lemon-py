@@ -129,7 +129,7 @@ def decode_stringdef(tokname, code) -> str:
 
 def cstring(s: str, uni: bool) -> str:
     if uni:
-        return f'U"{s}"'
+        return f'L"{s}"'
     else:
         return f'"{s}"'
 

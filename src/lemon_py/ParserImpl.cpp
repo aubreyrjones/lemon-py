@@ -21,8 +21,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
-#define LEMON_PY_UNICODE_SUPPORT
-
 #include <ParseNode.hpp>
 
 #include <memory>
@@ -63,75 +61,70 @@ namespace py = pybind11;
 #ifdef LEMON_PY_UNICODE_SUPPORT
 #include <utf.hpp>
 
-namespace std {
+// namespace std {
 
-template <>
-class regex_traits<u32string::value_type> {
-public:
-    using shadow_type = regex_traits<wchar_t>;
-    shadow_type shadow;
+// template <>
+// class regex_traits<u32string::value_type> {
+// public:
+//     using shadow_type = regex_traits<wchar_t>;
+//     shadow_type shadow;
 
-    regex_traits() : shadow() {}
+//     regex_traits() : shadow() {}
 
-    using char_type = u32string::value_type;
-    using string_type = u32string;
-    using locale_type = shadow_type::locale_type;
-    using char_class_type = shadow_type::char_class_type;
+//     using char_type = u32string::value_type;
+//     using string_type = u32string;
+//     using locale_type = shadow_type::locale_type;
+//     using char_class_type = shadow_type::char_class_type;
 
-    static size_t length(const char_type* p) { 
-        return shadow_type::length((const wchar_t*) p);  //c-style casts because these should be the same type!
-    }
+//     static size_t length(const char_type* p) { 
+//         return shadow_type::length((const wchar_t*) p);  //c-style casts because these should be the same type!
+//     }
 
-    char_type translate(char_type c) const {
-        return shadow.translate((wchar_t) c);
-    }
+//     char_type translate(char_type c) const {
+//         return shadow.translate((wchar_t) c);
+//     }
 
-    char_type translate_nocase(char_type c) const {
-        return shadow.translate_nocase((wchar_t) c);
-    }
+//     char_type translate_nocase(char_type c) const {
+//         return shadow.translate_nocase((wchar_t) c);
+//     }
 
-    template <class IT>
-    string_type transform(IT first, IT last) const {
-        typedef std::collate<char_type> __collate_type;
-	    const __collate_type& __fclt(use_facet<__collate_type>(shadow.getloc()));
-	    string_type __s(first, last);
-	    return __fclt.transform(__s.data(), __s.data() + __s.size());
-    }
+//     template <class IT>
+//     string_type transform(IT first, IT last) const {
+//         auto shadowVal = shadow.transform(first, last);
+//         return string_type(shadowVal.data(), shadowVal.data() + shadowVal.size());
+//     }
 
-    template <class IT>
-    string_type transform_primary(IT first, IT last) const {
-	    typedef std::ctype<char_type> __ctype_type;
-	    const __ctype_type& __fctyp(use_facet<__ctype_type>(shadow.getloc()));
-	    std::vector<char_type> __s(first, last);
-	    __fctyp.tolower(__s.data(), __s.data() + __s.size());
-	    return this->transform(__s.data(), __s.data() + __s.size());
-    }
+//     template <class IT>
+//     string_type transform_primary(IT first, IT last) const {
+//         auto shadowVal = shadow.transform_primary(first, last);
+//         return string_type(shadowVal.data(), shadowVal.data() + shadowVal.size());
+//     }
 
-    template< class ForwardIt >
-    string_type lookup_collatename( ForwardIt first, ForwardIt last ) const {
-        auto shadowVal = shadow.lookup_collatename(first, last);
-        return string_type(shadowVal.data(), shadowVal.data() + shadowVal.size());
-    }
+//     template< class ForwardIt >
+//     string_type lookup_collatename( ForwardIt first, ForwardIt last ) const {
+//         auto shadowVal = shadow.lookup_collatename(first, last);
+//         return string_type(shadowVal.data(), shadowVal.data() + shadowVal.size());
+//     }
 
-    template< class ForwardIt >
-    char_class_type lookup_classname( ForwardIt first, ForwardIt last, bool icase = false ) const {
-        return shadow.lookup_classname(first, last, icase);
-    }
+//     template< class ForwardIt >
+//     char_class_type lookup_classname( ForwardIt first, ForwardIt last, bool icase = false ) const {
+//         return shadow.lookup_classname(first, last, icase);
+//     }
 	
-	bool isctype( char_type c, char_class_type f ) const {
-        return shadow.isctype(c, f);
-    }
+// 	bool isctype( char_type c, char_class_type f ) const {
+//         return shadow.isctype(c, f);
+//     }
 
-    int value( char_type ch, int radix ) const {
-        return shadow.value(ch, radix);
-    }
+//     int value( char_type ch, int radix ) const {
+//         return shadow.value(ch, radix);
+//     }
 
-    locale_type imbue( locale_type loc ) { return shadow.imbue(loc); }
+//     locale_type imbue( locale_type loc ) { return shadow.imbue(loc); }
 
-    locale_type getloc() const { return shadow.getloc(); }
+//     locale_type getloc() const { return shadow.getloc(); }
 
-};
-}
+// };
+// }
 
 #endif
 
@@ -154,15 +147,15 @@ _parser_impl::ustring const& toInternal(std::string const& ascii) {
 
 #else
 
-using ustring = std::u32string;
-using ustring_view = std::u32string_view;
+using ustring = std::wstring;
+using ustring_view = std::wstring_view;
 
 std::string toExternal(_parser_impl::ustring const& utf32) {
     return utf8::utf32to8(utf32);
 }
 
 _parser_impl::ustring toInternal(std::string const& utf8) {
-    return utf8::utf8to32(utf8);
+    return utf8::utf8toW(utf8);
 }
 #endif
 

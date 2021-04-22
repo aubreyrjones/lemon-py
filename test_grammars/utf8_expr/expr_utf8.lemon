@@ -1,0 +1,59 @@
+/*
+@pymod expr_utf_parse
+
+@lexdef
+
+!whitespace : \s+
+
+' ' \     := CHAR
+' " \ s j := STRING
+
+ADD := Добавлять
+SUB := -
+MUL := *
+DIV := /
+L_PAREN := (
+R_PAREN := )
+COMMA := ,
+
+FLOAT_LIT : [0-9]+\.[0-9]+
+INT_LIT : [0-9]+
+FNCALL :: ([_а-я][_а-я0-9]*)\s*\(
+MACRO :: ([_А-Я][_А-Я0-9]*)\s*\(
+IDENT : [_а-яА-Я][_а-яА-Я0-9]*
+@endlex
+*/
+
+// token association, and implicit (ascending) priority
+%left COMMA FNCALL MACRO.
+%left ADD SUB.
+%left MUL DIV.
+
+toplevel ::= expr(c1).                            { _ = c1; }
+
+expr(e) ::= expr(c1) ADD(o) expr(c2).             { e = _("+", {c1, c2}, ~o); }
+expr(e) ::= expr(c1) SUB(o) expr(c2).             { e = _("-", {c1, c2}, ~o); }
+expr(e) ::= expr(c1) MUL(o) expr(c2).             { e = _("*", {c1, c2}, ~o); }
+expr(e) ::= expr(c1) DIV(o) expr(c2).             { e = _("/", {c1, c2}, ~o); }
+expr(e) ::= SUB expr(c1). [MUL]                   { e = _("neg", {c1}, ~c1); }
+expr(e) ::= L_PAREN expr(e1) R_PAREN.             { e = e1; }
+
+expr(e) ::= varref(e1).                           { e = e1; }
+varref(e) ::= IDENT(lit).                         { e = _("varref", {_(lit)}, ~lit); }
+
+expr(e) ::= fncall(e1).                           { e = e1; }
+expr(e) ::= macro(e1).                            { e = e1; }
+fncall(e) ::= FNCALL(lit1) arg_list(c2) R_PAREN.  { e = _("fncall", {_(lit1), c2}, ~lit1); }
+macro(e) ::= MACRO(lit1) arg_list(c2) R_PAREN.    { e = _("macro", {_(lit1), c2}, ~lit1); }
+
+arg_list(L) ::= .                                 { L = _("arglist"); }
+arg_list(L) ::= expr(c1).                         { L = _("arglist", {c1}, ~c1); }
+arg_list(L) ::= arg_list(L1) COMMA expr(e).       { L = L1 += e; }
+
+
+expr(e) ::= FLOAT_LIT(lit).                       { e = _(lit); }
+expr(e) ::= INT_LIT(lit).                         { e = _(lit); }
+
+expr(e) ::= CHAR(lit).                            { e = _(lit); }
+expr(e) ::= STRING(lit).                          { e = _(lit); }
+
