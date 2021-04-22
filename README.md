@@ -256,7 +256,6 @@ _____________________________________________________________________
 
 # Parser Module API
 
-
 Once you've built your language module, you can simply `import` it by
 the name you gave it with the `@pymod` directive.
 
