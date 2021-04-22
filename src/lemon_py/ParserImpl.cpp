@@ -21,7 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
-
+#define LEMON_PY_UNICODE_SUPPORT
 
 #include <ParseNode.hpp>
 
@@ -60,20 +60,126 @@ namespace py = pybind11;
 
 #endif
 
+#ifdef LEMON_PY_UNICODE_SUPPORT
+#include <utf.hpp>
+
+namespace std {
+
+template <>
+class regex_traits<u32string::value_type> {
+public:
+    using shadow_type = regex_traits<wchar_t>;
+    shadow_type shadow;
+
+    regex_traits() : shadow() {}
+
+    using char_type = u32string::value_type;
+    using string_type = u32string;
+    using locale_type = shadow_type::locale_type;
+    using char_class_type = shadow_type::char_class_type;
+
+    static size_t length(const char_type* p) { 
+        return shadow_type::length((const wchar_t*) p);  //c-style casts because these should be the same type!
+    }
+
+    char_type translate(char_type c) const {
+        return shadow.translate((wchar_t) c);
+    }
+
+    char_type translate_nocase(char_type c) const {
+        return shadow.translate_nocase((wchar_t) c);
+    }
+
+    template <class IT>
+    string_type transform(IT first, IT last) const {
+        typedef std::collate<char_type> __collate_type;
+	    const __collate_type& __fclt(use_facet<__collate_type>(shadow.getloc()));
+	    string_type __s(first, last);
+	    return __fclt.transform(__s.data(), __s.data() + __s.size());
+    }
+
+    template <class IT>
+    string_type transform_primary(IT first, IT last) const {
+	    typedef std::ctype<char_type> __ctype_type;
+	    const __ctype_type& __fctyp(use_facet<__ctype_type>(shadow.getloc()));
+	    std::vector<char_type> __s(first, last);
+	    __fctyp.tolower(__s.data(), __s.data() + __s.size());
+	    return this->transform(__s.data(), __s.data() + __s.size());
+    }
+
+    template< class ForwardIt >
+    string_type lookup_collatename( ForwardIt first, ForwardIt last ) const {
+        auto shadowVal = shadow.lookup_collatename(first, last);
+        return string_type(shadowVal.data(), shadowVal.data() + shadowVal.size());
+    }
+
+    template< class ForwardIt >
+    char_class_type lookup_classname( ForwardIt first, ForwardIt last, bool icase = false ) const {
+        return shadow.lookup_classname(first, last, icase);
+    }
+	
+	bool isctype( char_type c, char_class_type f ) const {
+        return shadow.isctype(c, f);
+    }
+
+    int value( char_type ch, int radix ) const {
+        return shadow.value(ch, radix);
+    }
+
+    locale_type imbue( locale_type loc ) { return shadow.imbue(loc); }
+
+    locale_type getloc() const { return shadow.getloc(); }
+
+};
+}
+
+#endif
 
 namespace _parser_impl {
 
 // ==================== UTILITIES AND DECLARATIONS =======================
 
 
+#ifndef LEMON_PY_UNICODE_SUPPORT
+using ustring = std::string;
+using ustring_view = std::string_view;
+
+std::string const& toExternal(_parser_impl::ustring const& ascii) {
+    return ascii;
+}
+
+_parser_impl::ustring const& toInternal(std::string const& ascii) {
+    return ascii;
+}
+
+#else
+
+using ustring = std::u32string;
+using ustring_view = std::u32string_view;
+
+std::string toExternal(_parser_impl::ustring const& utf32) {
+    return utf8::utf32to8(utf32);
+}
+
+_parser_impl::ustring toInternal(std::string const& utf8) {
+    return utf8::utf8to32(utf8);
+}
+#endif
+
+using sstream = std::basic_stringstream<ustring::value_type>;
+using siter = ustring::const_iterator;
+using uregex = std::basic_regex<ustring::value_type>;
+using regex_results = std::match_results<siter>;
+using uuchar = ustring::value_type;
+
 //==================== TOKENS ==============================
 
 /** Used to intern strings found by the lexer. */
 class StringTable {
 protected:
-	std::vector<std::string> strings;
+	std::vector<ustring> strings;
 
-	typedef std::unordered_map<std::string, size_t> PrevMap;
+	typedef std::unordered_map<ustring, size_t> PrevMap;
 
 	PrevMap cachedLocations;
 
@@ -88,7 +194,7 @@ public:
     /**
      * Push a string and return the index.
     */
-	size_t pushString(std::string const& s) {
+	size_t pushString(ustring const& s) {
         PrevMap::iterator it = cachedLocations.find(s);
         if (it != cachedLocations.end()){
             return (*it).second;
@@ -105,16 +211,16 @@ public:
     /**
      * Get an existing string by index.
     */
-	std::string const& getString(size_t index)  {
+	ustring const& getString(size_t index)  {
     	return strings[index];
     }
 };
 
 /** Stores mappings from logical token names to string representations. */
-static std::unordered_map<int, std::string> token_name_map;
+static std::unordered_map<int, ustring> token_name_map;
 
 /** Stores mappings from logical literal token names to literal values. */
-static std::unordered_map<int, std::string> token_literal_value_map;
+static std::unordered_map<int, ustring> token_literal_value_map;
 
 /**
  * This is the token value passed into the Lemon parser. It always has a type, 
@@ -136,7 +242,7 @@ struct Token {
      * Get either the regex-matched value for a value token, or just a copy of the
      * literal string for a literal token.
     */
-    std::string value() const { 
+    ustring value() const { 
         if (valueTable) return valueTable->getString(valueIndex);
         return token_literal_value_map[type];
     }
@@ -144,17 +250,17 @@ struct Token {
     /**
      * Get the name of this token as a string.
     */
-    std::string const& name() const {
+    ustring const& name() const {
         return token_name_map[type];
     }
 
     /**
      * Get a reasonable, perhaps truncated, string representation of this token.
     */
-    std::string toString() const {
-        char outbuf[1024]; // just do the first 1k characters
-        snprintf(outbuf, 1024, "%s [line: %d] <%s>", name().c_str(), line, value().c_str());
-        return std::string(outbuf);
+    ustring toString() const {
+        sstream valueStream;
+        valueStream << name() << "[line: ]" << line << " <" << value() << ">";
+        return valueStream.str();
     }
 
     int operator~() const { return line; }
@@ -166,7 +272,7 @@ Token make_token(int type, int line) {
 }
 
 /** Convenience method to make a token. */
-Token make_token(int type, StringTable & st, std::string const& s, int line) {
+Token make_token(int type, StringTable & st, ustring const& s, int line) {
     return Token {type, st.pushString(s), &st, line};
 }
 
@@ -180,22 +286,22 @@ Token make_token(int type, StringTable & st, std::string const& s, int line) {
 */
 template <typename V_T>
 struct PTNode {
-    char code; ///< character contribution
+    uuchar code; ///< character contribution
     std::optional<V_T> value; ///< the output token value if matched
-    std::optional<std::regex> terminatorPattern; ///< a regex used to check if the literal is properly terminated
+    std::optional<uregex> terminatorPattern; ///< a regex used to check if the literal is properly terminated
     std::vector<PTNode> children; ///< suffixes
     bool isRoot; ///< is this the root node?
 
-    PTNode(char code, std::optional<V_T> const& value, std::optional<std::regex> const& terminator, bool isRoot = false) : code(code), value(value), terminatorPattern(terminator), children(), isRoot(isRoot) {}
+    PTNode(uuchar code, std::optional<V_T> const& value, std::optional<uregex> const& terminator, bool isRoot = false) : code(code), value(value), terminatorPattern(terminator), children(), isRoot(isRoot) {}
 
     /**
      * Recursively add a literal to the tree.
     */
-    void add_value(std::string_view const& code, V_T const& value, std::optional<std::regex> const& terminator = std::nullopt) {
+    void add_value(ustring_view const& code, V_T const& value, std::optional<uregex> const& terminator = std::nullopt) {
         if (code.length() == 0) { // all of the previous recursions have matched (or user is adding a null string?)
             if (isRoot // yeah, it was a null string, which won't work and is extremely unlikely coming from the autogen lexer conf
                 || this->value) // of we're already set
-                    throw std::runtime_error("Attempting to redefine lexer literal " + token_name_map[this->value.value()]);
+                    throw std::runtime_error("Attempting to redefine lexer literal " + toExternal(token_name_map[this->value.value()]));
             this->value = value;
             this->terminatorPattern = terminator;
             return;
@@ -216,19 +322,19 @@ struct PTNode {
     }
 
     /** Check the terminator pattern, or return true automatically if we don't have a terminator defined.  */
-    bool tryTerminator(std::string::const_iterator const& first, std::string::const_iterator const& last) const {
+    bool tryTerminator(ustring::const_iterator const& first, ustring::const_iterator const& last) const {
         if (!terminatorPattern) return true;
 
         return std::regex_search(first, last, terminatorPattern.value(), std::regex_constants::match_continuous);
     }
 
     /** Value, and an iterator pointing to the input character immediately following the literal. */
-    using LexResult = std::tuple<V_T, std::string::const_iterator>;
+    using LexResult = std::tuple<V_T, ustring::const_iterator>;
 
     /**
      * Try to match the maximal string possible from the beginning of the input range.
     */
-    std::optional<LexResult> tryValue(std::string::const_iterator first, std::string::const_iterator last) const {
+    std::optional<LexResult> tryValue(ustring::const_iterator first, ustring::const_iterator last) const {
         if (children.empty() || first == last) { // we'll never have a null input, so we've reached end of input or end of chain while still matching.
             goto bailout;
         }
@@ -280,14 +386,13 @@ struct StringScannerFlags {
 };
 
 /** Convert a string into a case-insensitive, ECMA-flavored regex. */
-std::regex s2regex(std::string const& s, RegexScannerFlags const& flags) {
+uregex s2regex(ustring const& s, RegexScannerFlags const& flags) {
     auto flagset = std::regex::ECMAScript;
     if (!(flags & RegexScannerFlags::CaseSensitive)) {
         flagset |= std::regex::icase;
     }
     
-
-    return std::regex(s, flagset);
+    return uregex(s, flagset);
 }
 
 /**
@@ -312,14 +417,14 @@ std::regex s2regex(std::string const& s, RegexScannerFlags const& flags) {
 */
 struct Lexer {
     static PTNode<int> literals;
-    static std::vector<std::regex> skips;
-    static std::vector<std::tuple<std::regex, int>> valueTypes; ///< regex pattern, token code
-    static std::vector<std::tuple<char, char, int, StringScannerFlags>> stringDefs; ///< delim, escape, token code, span newlines
+    static std::vector<uregex> skips;
+    static std::vector<std::tuple<uregex, int>> valueTypes; ///< regex pattern, token code
+    static std::vector<std::tuple<uuchar, uuchar, int, StringScannerFlags>> stringDefs; ///< delim, escape, token code, span newlines
 
     /**
      * Add a literal/constant token, with an optional terminator pattern.
     */
-    static void add_literal(int tok_code, std::string const& code, std::optional<std::string> const& terminator = std::nullopt, RegexScannerFlags const& terminatorFlags = RegexScannerFlags::Default) {
+    static void add_literal(int tok_code, ustring const& code, std::optional<ustring> const& terminator = std::nullopt, RegexScannerFlags const& terminatorFlags = RegexScannerFlags::Default) {
         literals.add_value(
                           code, 
                           tok_code, 
@@ -330,25 +435,24 @@ struct Lexer {
     }
 
     /** Add a skip pattern to the lexer definition. */
-    static void add_skip(std::string const& r, RegexScannerFlags const& flags = RegexScannerFlags::Default) {
+    static void add_skip(ustring const& r, RegexScannerFlags const& flags = RegexScannerFlags::Default) {
         skips.push_back(s2regex(r, flags));
     }
 
     /** Add a value pattern to the lexer definition. */
-    static void add_value_type(int tok_code, std::string const& r, RegexScannerFlags const& flags = RegexScannerFlags::Default) {
+    static void add_value_type(int tok_code, ustring const& r, RegexScannerFlags const& flags = RegexScannerFlags::Default) {
         valueTypes.push_back(std::make_tuple(s2regex(r, flags), tok_code));
     }
 
     /** Add a string definition to the lexer definition. */
-    static void add_string_def(char delim, char escape, int tok_code, StringScannerFlags flags = StringScannerFlags::Default) {
+    static void add_string_def(uuchar delim, uuchar escape, int tok_code, StringScannerFlags flags = StringScannerFlags::Default) {
         stringDefs.push_back(std::make_tuple(delim, escape, tok_code, flags));
     }
 
-    using siter = std::string::const_iterator;
     // == instance ==
 private:
-    std::string input; ///< the entire input string to lex
-    std::string::const_iterator curPos; ///< current authoritative position in the string
+    ustring input; ///< the entire input string to lex
+    ustring::const_iterator curPos; ///< current authoritative position in the string
     StringTable &stringTable; ///< reference to parser string table to use
     int count; ///< count of tokens lexed
     bool reachedEnd; ///< have we reached the end?
@@ -358,7 +462,7 @@ private:
     std::runtime_error make_error(std::string const& message) {
         char buf[1024];
         snprintf(buf, 1024, "Lexer failure on line %d. %s Around here:\n", line, message.c_str());
-        return std::runtime_error(std::string(buf) + remainder(100));
+        return std::runtime_error(std::string(buf) + toExternal(remainder(100)));
     }
 
     /** Advance curPos by the given count. */
@@ -396,7 +500,7 @@ private:
         do { 
             skipped = false;
             for (auto const& r : skips) {
-                std::smatch results;
+                regex_results results;
                 if (std::regex_search(curPos, input.cend(), results, r, std::regex_constants::match_continuous)) {
                     skipped = true;
                     advanceBy(results.length());
@@ -406,7 +510,7 @@ private:
     }
 
     /** Find the end of the string from the given start position. */
-    siter stringEnd(char stringDelim, char escape, StringScannerFlags flags, siter stringStart, siter end) {
+    siter stringEnd(uuchar stringDelim, uuchar escape, StringScannerFlags flags, siter stringStart, siter end) {
         for (; stringStart != end; ++stringStart) {
             if (*stringStart == escape) {
                 auto nextChar = stringStart + 1;
@@ -430,12 +534,12 @@ private:
 
     /** Try all of the string definitions and attempt to get a string, returning nullopt if no string is possible. */
     std::optional<Token> nextString() {
-        auto n = [this] (int tokCode, char delim, char escape, StringScannerFlags flags) -> std::optional<Token> {
+        auto n = [this] (int tokCode, uuchar delim, uuchar escape, StringScannerFlags flags) -> std::optional<Token> {
             if (*curPos == delim) { // if we get past this, we're either going to return a string token or exception out.
                 auto send = stringEnd(delim, escape, flags, curPos + 1, input.cend());
                 auto startLine = line;
                 auto sstart = advanceTo(send + 1); // move past the end delim
-                return make_token(tokCode, stringTable, std::string(sstart + 1, send), startLine);
+                return make_token(tokCode, stringTable, ustring(sstart + 1, send), startLine);
             }
             else { 
                 return std::nullopt;
@@ -448,7 +552,7 @@ private:
             if (auto matchedString = n(get<2>(sdef), get<0>(sdef), get<1>(sdef), get<3>(sdef))) {
                 auto flags = get<3>(sdef);
                 if (flags & StringScannerFlags::JoinAdjacent) {
-                    std::stringstream retval;
+                    sstream retval;
                     retval << matchedString.value().value();
                     skip();
                     while (auto anotherOne = n(get<2>(sdef), get<0>(sdef), get<1>(sdef), get<3>(sdef))) {
@@ -478,14 +582,14 @@ private:
     /** Try all the value patterns to see if one matches, returning it if it does. Returns nullopt if nothing matches. */
     std::optional<Token> nextValue() {
         for (auto const& r : valueTypes) {
-            std::smatch results;
+            regex_results results;
             if (std::regex_search(curPos, input.cend(), results, std::get<0>(r), std::regex_constants::match_continuous)) {
                 auto match_iterator = results.begin();
                 if (results.size() > 1) { // skip past the whole match to get a submatch
                     std::advance(match_iterator, 1);
                 }
 
-                std::string value = (*match_iterator).str();
+                ustring value = (*match_iterator).str();
 
                 advanceBy(results.length()); // advance by length of _entire_ match
                 return make_token(std::get<1>(r), stringTable, value, line);
@@ -497,7 +601,7 @@ private:
 public:
 
     /** Create a new lexer with the given input, using the given string table. */
-    Lexer(std::string const& inputString, StringTable & stringTable) : input(inputString), curPos(input.cbegin()), stringTable(stringTable), count(0), reachedEnd(false) {}
+    Lexer(ustring const& inputString, StringTable & stringTable) : input(inputString), curPos(input.cbegin()), stringTable(stringTable), count(0), reachedEnd(false) {}
 
     /** 
      * Get the next token. Returns a special EOF token (defined by Lemon) when it 
@@ -543,8 +647,8 @@ public:
     }
 
     /** Get a portion of the input after the current position, used for error reporting. */
-    std::string remainder(size_t len = 0) {
-        return std::string(curPos, len && (curPos + len < input.cend()) ? (curPos + len) : input.cend());
+    ustring remainder(size_t len = 0) {
+        return ustring(curPos, len && (curPos + len < input.cend()) ? (curPos + len) : input.cend());
     }
 
     /** Get a count of all tokens lexed. */
@@ -592,7 +696,7 @@ struct GrammarActionNodeHandle {
 
 
 /** Either a production name or a token value. */
-using ParseValue = std::variant<std::string, Token>;
+using ParseValue = std::variant<ustring, Token>;
 
 /**
  * A parser-internal parse node.
@@ -662,7 +766,8 @@ struct GrammarActionParserHandle {
     Parser* parser; ///< pointer to the parent parser
 
     /** Passthrough to make_node. */
-    GrammarActionNodeHandle operator()(std::string const& production, ChildrenPack const& children = {}, int64_t line = -1);
+    GrammarActionNodeHandle operator()(const char* production, ChildrenPack const& children = {}, int64_t line = -1);
+    GrammarActionNodeHandle operator()(ustring const& production, ChildrenPack const& children = {}, int64_t line = -1);
     GrammarActionNodeHandle operator()(Token const& terminal);
     
     /** Passthrough to push_root. */
@@ -790,7 +895,7 @@ public:
      * Used by the lemon parser to signal a parse error.
     */
     void error() {
-        throw std::runtime_error("Parse error on token: " + currentToken.toString());
+        throw std::runtime_error("Parse error on token: " + toExternal(currentToken.toString()));
     }
 
     /**
@@ -810,7 +915,7 @@ public:
     ParseNode* parseString(std::string const& input) {
         reset(); // allocates the parser object
 
-        Lexer lexer(input, stringTable);
+        Lexer lexer(toInternal(input), stringTable);
 
         while (auto tok = lexer.next()) {
             offerToken(tok.value());
@@ -824,7 +929,11 @@ public:
     }
 };
 
-GrammarActionNodeHandle GrammarActionParserHandle::operator()(std::string const& production, ChildrenPack const& children, int64_t line){
+GrammarActionNodeHandle GrammarActionParserHandle::operator()(const char* production, ChildrenPack const& children, int64_t line) {
+    return parser->make_node(toInternal(production), children, line);
+}
+
+GrammarActionNodeHandle GrammarActionParserHandle::operator()(ustring const& production, ChildrenPack const& children, int64_t line){
     return parser->make_node(production, children, line);
 }
 
@@ -840,16 +949,13 @@ void GrammarActionParserHandle::drop_node(GrammarActionNodeHandle & toDrop) { pa
 void GrammarActionParserHandle::error() { parser->error(); }
 void GrammarActionParserHandle::success() { parser->success(); }
 
-// explicit GrammarActionNodeHandle& GrammarActionNodeHandle::operator=(Token const& tok) {
-    
-// }
-
 } // namespace
 
 
 //========================= PUBLIC API IMPLEMENTATIONS ================================
 
 namespace parser {
+
 
 /**
  * Create a complete dot graph, rooted at the given ParseNode.
@@ -876,16 +982,17 @@ std::string dotify(ParseNode const& pn) {
  * external value-semantics representation.
 */
 ParseNode uplift_node(_parser_impl::ParseNode* alien, int & idCounter) {
+    using _parser_impl::toExternal;
     ParseNode retval;
     retval.id = idCounter++;
 
     if (std::holds_alternative<_parser_impl::Token>(alien->value)) {
         auto tok = std::get<_parser_impl::Token>(alien->value);
-        retval.tokName = tok.name();
-        retval.value = tok.value();
+        retval.tokName = toExternal(tok.name());
+        retval.value = toExternal(tok.value());
     }
     else {
-        retval.production = std::get<std::string>(alien->value);
+        retval.production = toExternal(std::get<_parser_impl::ustring>(alien->value));
     }
     retval.line = alien->line;
     
@@ -945,6 +1052,7 @@ PYBIND11_MODULE(PYTHON_PARSER_MODULE_NAME, m) {
     .def_readonly("attr", &parser::ParseNode::attr, "Free-use attributes dictionary.");
 }
 #endif
+
 
 #ifndef LEMON_PY_SUPPRESS_PYTHON
 #include <concat_grammar.h>

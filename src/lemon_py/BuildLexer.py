@@ -127,30 +127,37 @@ def decode_stringdef(tokname, code) -> str:
 
     return f"Lexer::add_string_def('{delim}', '{escape}', {tokname}, {flags});\n"
 
-def implement_lexdef_line(lexdef: tuple) -> str:
+def cstring(s: str, uni: bool) -> str:
+    if uni:
+        return f'U"{s}"'
+    else:
+        return f'"{s}"'
+
+def implement_lexdef_line(lexdef: tuple, uni: bool) -> str:
+    cs = lambda s: cstring(s, uni)
     retval = '' + TABBY
     kind = lexdef[0]
     tokname = lexdef[1]
     if kind == 'skip':
         skipre = lexdef[2]
-        retval += f"Lexer::add_skip(\"{skipre[0]}\", {skipre[1]});\n"
+        retval += f"Lexer::add_skip({cs(skipre[0])}, {skipre[1]});\n"
     elif kind == 'value':
-        retval += f"Lexer::add_value_type({tokname}, \"{lexdef[2]}\", {lexdef[3]});\n"
+        retval += f"Lexer::add_value_type({tokname}, {cs(lexdef[2])}, {lexdef[3]});\n"
     elif kind == 'literal':
         if lexdef[3]:
             termre = lexdef[3]
-            retval += f"Lexer::add_literal({tokname}, \"{lexdef[2]}\", \"{termre[0]}\", {termre[1]});\n"
+            retval += f"Lexer::add_literal({tokname}, {cs(lexdef[2])}, {cs(termre[0])}, {termre[1]});\n"
         else:
-            retval += f"Lexer::add_literal({tokname}, \"{lexdef[2]}\");\n"
+            retval += f"Lexer::add_literal({tokname}, {cs(lexdef[2])});\n"
     elif kind == 'string':
         retval += decode_stringdef(lexdef[1], lexdef[2])
     
     if kind not in ('skip'):
-        retval += TABBY + f"token_name_map.emplace({tokname}, \"{tokname}\");\n"
+        retval += TABBY + f"token_name_map.emplace({tokname}, {cs(tokname)});\n"
 
     return retval
 
 
 
-def make_lexer(lemon_source: str) -> str:
-    return LEXER_START + "\n".join(map(implement_lexdef_line, scan_lexer_def(lemon_source))) + LEXER_END
+def make_lexer(lemon_source: str, uni = False) -> str:
+    return LEXER_START + "\n".join(map(lambda ld: implement_lexdef_line(ld, uni), scan_lexer_def(lemon_source))) + LEXER_END

@@ -127,7 +127,8 @@ def _gpp_command(module_name: str):
     pylink = subprocess.check_output(['python3-config', '--ldflags']).decode().strip()
 
     retval = [cpp_COMPILER]
-    retval.extend('-O3 -Wall -shared -std=c++17 -fPIC -fvisibility=hidden'.split())
+    retval.append('-g')
+    retval.extend('-Wall -shared -std=c++17 -fPIC -fvisibility=hidden'.split())
     retval.extend(pyinclude.split())
     retval.extend(pylink.split())
     retval.extend([
@@ -143,7 +144,7 @@ def _gpp_command(module_name: str):
     return retval
 
 
-def _concatenate_input(grammar_text: str, impl_text: str):
+def _concatenate_input(grammar_text: str, impl_text: str, uni: bool):
     '''
     Build the whole grammar input file for lemon. This has
     the real grammar text, the codegen'd lexer init, and
@@ -152,7 +153,7 @@ def _concatenate_input(grammar_text: str, impl_text: str):
     with open(GRAMMAR_HEADER_FILE, 'r') as f:
         header_text = f.read()
 
-    lexer_def = make_lexer(grammar_text)
+    lexer_def = make_lexer(grammar_text, uni)
     codegen_text = f"%include {{\n{impl_text + lexer_def}\n}}\n"
 
     whole_text = grammar_text + "\n\n" + codegen_text + header_text
@@ -216,7 +217,7 @@ def print_lang_header():
         print("@endlex\n*/")
 
 
-def build_lempy_grammar(grammar_file_path: str, install = False, use_temp = True, print_terminals = False, cpp_dir = None):
+def build_lempy_grammar(grammar_file_path: str, install = False, use_temp = True, print_terminals = False, cpp_dir = None, use_unicode = False):
     _bootstrap_lemon()
 
     grammar_file_path = os.path.abspath(grammar_file_path)
@@ -227,7 +228,7 @@ def build_lempy_grammar(grammar_file_path: str, install = False, use_temp = True
     grammar_text = _read_all(grammar_file_path)
     grammar_module_name = _extract_module(grammar_text)
 
-    concatenated_text = _concatenate_input(grammar_text, CPP_IMPL_TEXT if cpp_dir else IMPL_TEXT)
+    concatenated_text = _concatenate_input(grammar_text, CPP_IMPL_TEXT if cpp_dir else IMPL_TEXT, use_unicode)
 
     with tempfile.TemporaryDirectory() as workdir:
         if use_temp:
@@ -252,6 +253,7 @@ def build_lempy_grammar(grammar_file_path: str, install = False, use_temp = True
 if __name__ == '__main__':
     import argparse
     ap = argparse.ArgumentParser(description="Build a grammar and optionally install it to the python path.")
+    ap.add_argument('--unicode', default=False, const=True, action='store_const', help="Enable unicode support. This is necessary for reliable non-ASCII input, but increases memory usage in the resulting parser.")
     ap.add_argument('--cpp', type=str, required=False, help="Specify to output C++ compatible files to the indicated directory. Disables building the Python module.")
     ap.add_argument('--terminals', default=False, const=True, action='store_const', help="Print a skeleton `@lexdef` including all grammar-defined terminals.")
     ap.add_argument('--debug', default=False, const=True, action='store_const', help="Don't use a temp directory, dump everything in cwd.")
@@ -259,4 +261,4 @@ if __name__ == '__main__':
     ap.add_argument('grammar_file', type=str, help="The grammar file to build.")
     args = ap.parse_args()
 
-    build_lempy_grammar(args.grammar_file, not (args.noinstall or args.cpp), not args.debug, args.terminals, os.path.abspath(args.cpp) if args.cpp else None)
+    build_lempy_grammar(args.grammar_file, not (args.noinstall or args.cpp), not args.debug, args.terminals, os.path.abspath(args.cpp) if args.cpp else None, args.unicode)
