@@ -72,7 +72,7 @@ expressions.lemon
 @pymod expr_parse
 
 @lexdef
-!whitespace : \s
+!whitespace : \s+
 !comment : //.*\n
 
 ' ' \   := CHAR
@@ -198,15 +198,22 @@ give usage information on the particular command and its options.
   grammar into a loadable python module, and (optionally/usually)
   install that to the current user's local python packages.
 
-  * `--terminals` - builds the grammar, and prints out a skeleton
-    lexer definition.
+  * `--terminals` - runs lemon on the input file and prints out a
+    skeleton lexer definition.
 
-  * `--debug` - instead of building intermediate files into a
-    temporary directory, drop the files into the current working
-    directory (but also still install the package).
+  * `--debug` - build and install as normal, except instead of
+    building intermediate files into a temporary directory, drop the
+    files into the current working directory.
+
+  * `--nobuild` - put the entire Python module source together, but
+    don't call the compiler on it. Best used with `--debug`.
 
   * `--noinstall` - build the grammar, but skip the step where it's
     installed to the user's path. Best used with `--debug`.
+
+  * `--unicode` - enable partial support for input languages needing
+    unicode-aware regex. (See the section at the end of this readme
+    for a better idea of what this does.)
 
   * `--cpp DIR` - instead of building a Python parser module, output
     an implementation file and clean header into the indicated
@@ -252,8 +259,8 @@ lemon-py internally uses your system's C compiler to bootstrap the
 `lemon` executable, and then the C++ compiler each time you rebuild a
 target grammar. 
 
-lemon-py will first check for the `CC` and `CXX` environment
-variables, to set the C and C++ compilers respectively.
+At startup lemon-py will first check for the `CC` and `CXX`
+environment variables, to set the C and C++ compilers respectively.
 
 If not set via environment, lemon-py uses `clang` on MacOS and
 `gcc`/`g++` everywhere else.
@@ -352,7 +359,7 @@ for the same structures.
   `dict`. This is very useful for trivially interoperating with
   existing Python code designed for tree-of-`dict` data
   structures. This can enable a JSON parse-tree export with 1 line of
-  code (see `Driver.py`).
+  code (see example above).
 
 `ParseNode` supports the Python container interface over its children,
 including iteration and subscripting. `mynode[2]` will return the 3rd
@@ -368,7 +375,6 @@ syntactically-equivalent (sub)expressions.
 
 
 # Module Definition
-
 
 Lemon-py grammar definitions must include a `@pymod MODULE_NAME`
 directive somewhere indicating the Python `MODULE_NAME` to
@@ -443,7 +449,7 @@ this can simply result in an infinite loop internal to the lexer's
 
 ## Literals
 
-"literal" tokens are defined by a fixed string of
+"Literal" tokens are defined by a fixed string of
 case-sensitive/exactly-matched characters, and are stored/matched with
 a basic prefix tree. Literals are matched greedily, with the longest
 matching sequence having priority. Thus the order in which you define
@@ -485,7 +491,7 @@ TOKEN := literal_string : regular_expression
 
 ## Values
  
-"value" tokens are defined by a regular expression, and are returned
+"Value" tokens are defined by a regular expression, and are returned
 with both a token code and a text value. By default the entire pattern
 match is returned as the value. A single sub-match may be specified,
 and if present the lexer will extract the sub-match as the token's
@@ -514,10 +520,10 @@ content. Skip patterns are applied before every attempt at token
 extraction. The `reminder_name` below is not used internally, and can
 simply be used to label the skip pattern for human comprehension.
 
-NOTE: All regular expressions are currently matched *without* case
-sensitivity.
-
-* Skip syntax: `!reminder_name : regular_expression`.
+Skip syntax: 
+```
+!reminder_name : regular_expression
+```
 
 ## Strings
 
@@ -602,8 +608,8 @@ Skips are applied repeatedly, before checking for the next lexical
 token, until no skip consumes input. EOF is automatically emitted when
 the lexer reaches end of input. If the lexer has not reached the end
 of input, and no new token can be matched, an exception is
-thrown. Likewise, an exception is thrown if the lexer is called again
-_after_ having sent the EOF token.
+thrown. Calling the lexer after it has emitted EOF will simply return
+`std::nullopt` indefinitely.
 
 An example `@lexdef` can be found in the example at the top of this
 readme.
