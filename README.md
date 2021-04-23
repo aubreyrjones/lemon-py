@@ -11,6 +11,14 @@ Lemon Py
 * [Parser Definition](#Parser-Definition)
 * [C++](#C)
 
+Features
+
+  * LALR(1) parsing
+  * configurable lexing
+  * generic parse tree
+  * grammar action micro-DSL
+  * Python and C++17 interfaces
+
 
 # Overview
 
@@ -818,7 +826,8 @@ parser, and other internal doodads. You'll need to add that to your
 build's source files, updating it each time that you modify your
 grammar. Note that while this lemon-py parser _generation_ framework
 has some lazy system dependencies, the code *generated* by the
-framework should be platform-independent.
+framework should be platform-independent (unless you enable unicode
+support, which is dependent on `sizeof(wchar_t) == 4`).
 
 
 # Deep Matter
@@ -919,15 +928,16 @@ recursion.
 
 ## Unicode and Binary Support
 
+
 [Warning: the options in this section generate parser code that is
 **not** platform-agnostic. Default ASCII parsing should be
 platform-independent.]
 
 lemon-py parsers have _partial_, **experimental** support for UTF-8
-input languages on GCC and Clang platforms where
-`sizeof(wchar_t) == 4`. `std::u32string` support is _apparently_
-not sufficient, as `wchar_t` and `uchar32_t` are disjoint types
-even when they are the same size.
+input languages on GCC and Clang platforms where `sizeof(wchar_t) ==
+4`. `std::u32string` support is apparently not sufficient, as
+`wchar_t` and `uchar32_t` are disjoint types even when they are the
+same size.
 
 To enable unicode support, compile your grammar with the `--unicode`
 flag. This has two basic effects:
@@ -936,8 +946,8 @@ flag. This has two basic effects:
   all strings during the parsing process.
 
 * lemon-py will assume the input is UTF-8 and _convert_ from UTF-8 to
-  UTF-32. It will do the opposite on output, encoding the entire parse
-  tree into UTF-8 before returning it.
+  UTF-32 on input. It will do the opposite on output, encoding the
+  entire parse tree into UTF-8 before returning it.
 
 Literal and string support work as expected. Those code paths are
 binary/utf-8 clean in 8-bit, so they're equally functional in 32-bit.
@@ -978,11 +988,15 @@ Notes:
   any ASCII-delimeter cleanly, and return the correct string even if
   there are utf-8 characters in between.
 
-* "Real" unicode support, like integrating IUC, is entirely beyond the
+* "Real" unicode support, like integrating ICU, is entirely beyond the
   scope of this project. This has already grown well beyond the little
   "regex lexer + string tree" I had in mind when I started, and trying
   to integreate compliant, normalizing unicode support into the
   lemon-py "invisible" build-chain sounds like no fun at all.
+
+In standard 8-bit/ASCII mode, the lexer/parser should be binary
+clean. Again, regex are going to be the pinch point, as you'll need to
+encode all your patterns using the `\x` operator to set hex codes.
 
 
 ## Motivation and Alternatives
@@ -1060,9 +1074,9 @@ does not support operator associativity or precedence, meaning that
 despite the algorithm it uses, it functionally has many of the same
 shortcomings as typical LL and PEG parser generators.
 
-Of those options, only `pyleri` is capable of outputting a parser
-generator in C. I found it only after I started this project, and its
-syntax left me undeterred from finishing.
+Of those options, only `pyleri` is capable of outputting a parser in
+C. I found it only after I started this project, and its syntax left
+me undeterred from finishing.
 
 
 # Anticipated Questions

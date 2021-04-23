@@ -59,7 +59,10 @@ namespace py = pybind11;
 #include <utf.hpp>
 #endif
 
+// if we're built with `--unicode`, this will get replaced with the contents of
+// `utf.hpp`.
 struct _utf_include_replace_struct{};
+
 
 namespace _parser_impl {
 
@@ -70,10 +73,12 @@ namespace _parser_impl {
 using ustring = std::string;
 using ustring_view = std::string_view;
 
+inline
 std::string const& toExternal(_parser_impl::ustring const& ascii) {
     return ascii;
 }
 
+inline
 _parser_impl::ustring const& toInternal(std::string const& ascii) {
     return ascii;
 }
@@ -83,10 +88,12 @@ _parser_impl::ustring const& toInternal(std::string const& ascii) {
 using ustring = std::wstring;
 using ustring_view = std::wstring_view;
 
+inline
 std::string toExternal(_parser_impl::ustring const& utf32) {
     return utf8::utf32to8(utf32);
 }
 
+inline
 _parser_impl::ustring toInternal(std::string const& utf8) {
     return utf8::utf8toW(utf8);
 }
@@ -105,9 +112,9 @@ class StringTable {
 protected:
 	std::vector<ustring> strings;
 
-	typedef std::unordered_map<ustring, size_t> PrevMap;
+	typedef std::unordered_map<ustring, size_t> LocationMap;
 
-	PrevMap cachedLocations;
+	LocationMap cachedLocations;
 
 public:
 
@@ -121,7 +128,7 @@ public:
      * Push a string and return the index.
     */
 	size_t pushString(ustring const& s) {
-        PrevMap::iterator it = cachedLocations.find(s);
+        auto it = cachedLocations.find(s);
         if (it != cachedLocations.end()){
             return (*it).second;
         }
@@ -226,7 +233,7 @@ struct PTNode {
     void add_value(ustring_view const& code, V_T const& value, std::optional<uregex> const& terminator = std::nullopt) {
         if (code.length() == 0) { // all of the previous recursions have matched (or user is adding a null string?)
             if (isRoot // yeah, it was a null string, which won't work and is extremely unlikely coming from the autogen lexer conf
-                || this->value) // of we're already set
+                || this->value) // or we're already set
                     throw std::runtime_error("Attempting to redefine lexer literal " + toExternal(token_name_map[this->value.value()]));
             this->value = value;
             this->terminatorPattern = terminator;
