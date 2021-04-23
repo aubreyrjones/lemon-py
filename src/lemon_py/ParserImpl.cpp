@@ -988,9 +988,6 @@ PYBIND11_MODULE(PYTHON_PARSER_MODULE_NAME, m) {
 }
 #endif
 
+// this next line is used by the codegen aspect to inline token macro definitions
+struct _to_be_replaced_with_token_defines{};
 
-#ifndef LEMON_PY_SUPPRESS_PYTHON
-#include <concat_grammar.h>
-#else // this next line is used by the C++ codegen aspect to inline token macro definitions
-struct _to_be_replaced{};
-#endif

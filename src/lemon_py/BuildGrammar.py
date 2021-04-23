@@ -79,7 +79,7 @@ def _replace_token_defines(impl_text, defines) -> str:
     '''
     Replace the special sentinel struct with the token definitions.
     '''
-    return impl_text.replace('struct _to_be_replaced{};\n', defines)
+    return impl_text.replace('struct _to_be_replaced_with_token_defines{};\n', defines)
 
 
 def _read_impl_and_replace_tokens():
