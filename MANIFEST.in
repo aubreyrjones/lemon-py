@@ -1,6 +1,6 @@
 include src/lemon_py/header.lemon
 include src/lemon_py/lemon.c
 include src/lemon_py/lempar.c
-include src/lemon_py/ParseNode.hpp
-include src/lemon_py/ParserImpl.cpp
+include src/lemon_py/*.hpp
+include src/lemon_py/*.cpp
 

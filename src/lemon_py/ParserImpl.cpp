@@ -21,7 +21,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
-#include <ParseNode.hpp>
 
 #include <memory>
 #include <variant>
@@ -50,83 +49,17 @@ void LemonPyParseInit(void *);
 
 
 #ifndef LEMON_PY_SUPPRESS_PYTHON
-
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/operators.h>
 namespace py = pybind11;
-
 #endif
 
-#ifdef LEMON_PY_UNICODE_SUPPORT
+#ifdef LEMON_PY_UNICODE_IDE_SUPPORT
 #include <utf.hpp>
-
-// namespace std {
-
-// template <>
-// class regex_traits<u32string::value_type> {
-// public:
-//     using shadow_type = regex_traits<wchar_t>;
-//     shadow_type shadow;
-
-//     regex_traits() : shadow() {}
-
-//     using char_type = u32string::value_type;
-//     using string_type = u32string;
-//     using locale_type = shadow_type::locale_type;
-//     using char_class_type = shadow_type::char_class_type;
-
-//     static size_t length(const char_type* p) { 
-//         return shadow_type::length((const wchar_t*) p);  //c-style casts because these should be the same type!
-//     }
-
-//     char_type translate(char_type c) const {
-//         return shadow.translate((wchar_t) c);
-//     }
-
-//     char_type translate_nocase(char_type c) const {
-//         return shadow.translate_nocase((wchar_t) c);
-//     }
-
-//     template <class IT>
-//     string_type transform(IT first, IT last) const {
-//         auto shadowVal = shadow.transform(first, last);
-//         return string_type(shadowVal.data(), shadowVal.data() + shadowVal.size());
-//     }
-
-//     template <class IT>
-//     string_type transform_primary(IT first, IT last) const {
-//         auto shadowVal = shadow.transform_primary(first, last);
-//         return string_type(shadowVal.data(), shadowVal.data() + shadowVal.size());
-//     }
-
-//     template< class ForwardIt >
-//     string_type lookup_collatename( ForwardIt first, ForwardIt last ) const {
-//         auto shadowVal = shadow.lookup_collatename(first, last);
-//         return string_type(shadowVal.data(), shadowVal.data() + shadowVal.size());
-//     }
-
-//     template< class ForwardIt >
-//     char_class_type lookup_classname( ForwardIt first, ForwardIt last, bool icase = false ) const {
-//         return shadow.lookup_classname(first, last, icase);
-//     }
-	
-// 	bool isctype( char_type c, char_class_type f ) const {
-//         return shadow.isctype(c, f);
-//     }
-
-//     int value( char_type ch, int radix ) const {
-//         return shadow.value(ch, radix);
-//     }
-
-//     locale_type imbue( locale_type loc ) { return shadow.imbue(loc); }
-
-//     locale_type getloc() const { return shadow.getloc(); }
-
-// };
-// }
-
 #endif
+
+struct _utf_include_replace_struct{};
 
 namespace _parser_impl {
 
@@ -946,6 +879,8 @@ void GrammarActionParserHandle::success() { parser->success(); }
 
 
 //========================= PUBLIC API IMPLEMENTATIONS ================================
+
+#include <ParseNode.hpp>
 
 namespace parser {
 

@@ -113,10 +113,10 @@ def _copy_cpp_stuff(target_dir: str):
     
     parser_text = _read_all('concat_grammar.c')
 
-    impl_text = _read_impl_and_replace_tokens()
+    #impl_text = _read_impl_and_replace_tokens() # already done.
     
     with open(os.path.join(target_dir, "_parser.cpp"), 'w') as outimpl:
-        outimpl.write(impl_text + parser_text)
+        outimpl.write(parser_text)
 
 
 def _gpp_command(module_name: str):
@@ -144,39 +144,24 @@ def _gpp_command(module_name: str):
     return retval
 
 
-def _concatenate_input(grammar_text: str, impl_text: str, uni: bool):
-    '''
-    Build the whole grammar input file for lemon. This has
-    the real grammar text, the codegen'd lexer init, and
-    the `header.lemon` contents.
-    '''
-    with open(GRAMMAR_HEADER_FILE, 'r') as f:
-        header_text = f.read()
+def _concatenate_implementation(**kwargs):
+    retval = ''
 
-    lexer_def = make_lexer(grammar_text, uni)
-    codegen_text = f"%include {{\n{impl_text + lexer_def}\n}}\n"
+    static_impl_text = _read_impl_and_replace_tokens()
 
-    whole_text = grammar_text + "\n\n" + codegen_text + header_text
-
-    return whole_text
-
-
-def _write_lemon_input(whole_text: str, grammar_module_name: str):
-    '''
-    Write the input and call lemon to process it.
-    '''
-    with open('concat_grammar.lemon', 'w') as f:
-        f.write(whole_text)
-    subprocess.call([LEMON, f"-T{LEMON_TEMPLATE}", "concat_grammar.lemon"]) # f"-d{str(workdir)}",
-
-
-def write_and_build_curdir(whole_text: str, grammar_module_name: str):
-    '''
-    Output the augmented grammar, run `lemon`, and build the results with the C++ compiler.
-    '''
-    _write_lemon_input(whole_text, grammar_module_name)
+    if not kwargs.get('suppress_python', False):
+        static_impl_text = static_impl_text.replace('#include <ParseNode.hpp>\n', _read_all(_data_file("ParseNode.hpp")))
+    else:
+        pass # retval += '#define LEMON_PY_SUPPRESS_PYTHON 1\n\n'
     
-    subprocess.call(_gpp_command(grammar_module_name))
+    if kwargs.get('use_unicode', False):
+        retval += '#define LEMON_PY_UNICODE_SUPPORT 1\n\n'
+        static_impl_text = static_impl_text.replace('struct _utf_include_replace_struct{};\n', _read_all(_data_file("utf.hpp")))
+
+    retval += static_impl_text
+    retval += _read_all('concat_grammar.c')
+    retval = retval.replace("#pragma once", '\n')
+    return retval
 
 
 def _extract_module(text: str):
@@ -197,6 +182,65 @@ def _extract_module(text: str):
     return linesplit[1].strip()
 
 
+def _render_lemon_input(grammar_file_path: str, **kwargs):
+    '''
+    Render the input meant for `lemon`.
+    '''
+    user_input = _read_all(grammar_file_path)
+    mod = _extract_module(user_input)
+    lexer_def = make_lexer(user_input, kwargs.get('use_unicode', False))
+    codegen_text = f"%include {{\n{lexer_def}\n}}\n"
+
+    header_text = _read_all(GRAMMAR_HEADER_FILE)
+
+    return (mod, user_input + codegen_text + header_text)
+
+
+def _write_build_lemon_grammar(whole_text: str):
+    '''
+    Write the input and call lemon to process it.
+    '''
+    _bootstrap_lemon()
+    with open('concat_grammar.lemon', 'w') as f:
+        f.write(whole_text)
+    subprocess.check_call([LEMON, f"-T{LEMON_TEMPLATE}", "concat_grammar.lemon"])
+
+
+def _render_buildable_module(grammar_file_path: str, **kwargs):
+    '''
+    Build the given module into a python module in the current directory.
+    '''
+    module_name, rendered_grammar = _render_lemon_input(grammar_file_path, **kwargs)
+    _write_build_lemon_grammar(rendered_grammar)
+    full_impl = _concatenate_implementation(**kwargs)
+    with open('concat_grammar.c', 'w') as f:
+        f.write(full_impl)
+    return module_name
+
+
+def _chdir_and_build(grammar_file_path, use_temp, **kwargs):
+    grammar_file_path = os.path.abspath(grammar_file_path)
+    old_dir = os.path.abspath(os.curdir)
+    
+    with tempfile.TemporaryDirectory() as workdir:
+        if use_temp:
+            os.chdir(workdir)
+
+        grammar_module_name = _render_buildable_module(grammar_file_path, **kwargs)
+
+        if kwargs.get('print_terminals', False):
+            print_lang_header()
+
+        if kwargs.get('cpp_dir', False):
+            _copy_cpp_stuff(kwargs['cpp_dir'])
+        elif not kwargs.get('no_build', False):
+            subprocess.check_call(_gpp_command(grammar_module_name))
+            if kwargs.get('install', False):
+                soname = f"{grammar_module_name}.so"
+                shutil.copy2(soname, os.path.join(site.getusersitepackages(), soname))
+
+        os.chdir(old_dir)    
+
 def _lexdef_skeleton(tokname: str):
     '''
     Output a trivial lexdef for the given token.
@@ -216,39 +260,7 @@ def print_lang_header():
         print("\n".join(lines))
         print("@endlex\n*/")
 
-
-def build_lempy_grammar(grammar_file_path: str, install = False, use_temp = True, print_terminals = False, cpp_dir = None, use_unicode = False):
-    _bootstrap_lemon()
-
-    grammar_file_path = os.path.abspath(grammar_file_path)
-    print("Compiling: " + grammar_file_path)
-    
-    old_dir = os.path.abspath(os.curdir)
-
-    grammar_text = _read_all(grammar_file_path)
-    grammar_module_name = _extract_module(grammar_text)
-
-    concatenated_text = _concatenate_input(grammar_text, CPP_IMPL_TEXT if cpp_dir else IMPL_TEXT, use_unicode)
-
-    with tempfile.TemporaryDirectory() as workdir:
-        if use_temp:
-            os.chdir(workdir)
-
-        if cpp_dir:
-            _write_lemon_input(concatenated_text, grammar_module_name)
-            _copy_cpp_stuff(cpp_dir)
-        else:
-            write_and_build_curdir(concatenated_text, grammar_module_name)
-            if install:
-                soname = f"{grammar_module_name}.so"
-                shutil.copy2(soname, os.path.join(site.getusersitepackages(), soname))
-
-        if print_terminals:
-            print_lang_header()
-
-        os.chdir(old_dir)    
-    
-    pass
+# --------------
 
 if __name__ == '__main__':
     import argparse
@@ -257,8 +269,18 @@ if __name__ == '__main__':
     ap.add_argument('--cpp', type=str, required=False, help="Specify to output C++ compatible files to the indicated directory. Disables building the Python module.")
     ap.add_argument('--terminals', default=False, const=True, action='store_const', help="Print a skeleton `@lexdef` including all grammar-defined terminals.")
     ap.add_argument('--debug', default=False, const=True, action='store_const', help="Don't use a temp directory, dump everything in cwd.")
+    ap.add_argument('--nobuild', default=False, const=True, action='store_const', help="Don't build the shared object. Bail beforehand.")
     ap.add_argument('--noinstall', default=False, const=True, action='store_const', help="Don't install the language, most useful with --debug.")
     ap.add_argument('grammar_file', type=str, help="The grammar file to build.")
     args = ap.parse_args()
 
-    build_lempy_grammar(args.grammar_file, not (args.noinstall or args.cpp), not args.debug, args.terminals, os.path.abspath(args.cpp) if args.cpp else None, args.unicode)
+    func_args = { 'install' : not args.noinstall, 
+        'use_unicode' : args.unicode, 
+        'cpp_dir' : os.path.abspath(args.cpp) if args.cpp else None, 
+        'suppress_python' : True if args.cpp else False,
+        'no_build' : args.nobuild,
+        'print_terminals' : args.terminals}
+
+    _chdir_and_build(args.grammar_file, not args.debug, **func_args)
+
+    
