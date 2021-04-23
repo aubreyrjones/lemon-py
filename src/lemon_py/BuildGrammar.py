@@ -50,12 +50,6 @@ if sys.platform == 'darwin':
 c_COMPILER = _system_default_cc if 'CC' not in os.environ else os.environ['CC']
 cpp_COMPILER = _system_default_cxx if 'CXX' not in os.environ else os.environ['CXX']
 
-# this is the text injected to include the implementation
-IMPL_TEXT = "\n#include <ParserImpl.cpp> // include the implementation file \n\n"
-
-# for C++, we just rewrite everything into one giant file, so this can be null
-CPP_IMPL_TEXT = "\n"
-
 
 GRAMMAR_HEADER_FILE = _data_file("header.lemon")
 LEMON = _data_file("lemon")
