@@ -643,44 +643,43 @@ namespace utf8
     {
         std::string result;
         utf16to8(s.begin(), s.end(), std::back_inserter(result));
-        return result;
+        return std::move(result);
     }
 
     inline std::u16string utf8to16(const std::string& s)
     {
         std::u16string result;
         utf8to16(s.begin(), s.end(), std::back_inserter(result));
-        return result;
+        return std::move(result);
     }
 
     inline std::string utf32to8(const std::u32string& s)
     {
         std::string result;
         utf32to8(s.begin(), s.end(), std::back_inserter(result));
-        return result;
+        return std::move(result);
     }
 
     inline std::u32string utf8to32(const std::string& s)
     {
         std::u32string result;
         utf8to32(s.begin(), s.end(), std::back_inserter(result));
-        return result;
+        return std::move(result);
     }
 
     inline std::string utf32to8(const std::wstring& s)
     {
         std::string result;
         utf32to8(s.begin(), s.end(), std::back_inserter(result));
-        return result;
+        return std::move(result);
     }
 
     inline std::wstring utf8toW(const std::string& s)
     {
         std::wstring result;
         utf8to32(s.begin(), s.end(), std::back_inserter(result));
-        return result;
+        return std::move(result);
     }
-
 
     inline std::size_t find_invalid(const std::string& s)
     {
@@ -697,14 +696,14 @@ namespace utf8
     {
         std::string result;
         replace_invalid(s.begin(), s.end(), std::back_inserter(result), replacement);
-        return result;
+        return std::move(result);
     }
 
     inline std::string replace_invalid(const std::string& s)
     {
         std::string result;
         replace_invalid(s.begin(), s.end(), std::back_inserter(result));
-        return result;
+        return std::move(result);
     }
 
     inline bool starts_with_bom(const std::string& s)

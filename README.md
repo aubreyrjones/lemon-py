@@ -916,30 +916,76 @@ your machine. I've been programming for 25+ years now have have _only_
 run out of stack when there's been an error causing infinite
 recursion.
 
+
 ## Unicode and Binary Support
 
-I am working on unicode support. You can track my efforts in the
-`unicode` branch on github. These are not going well.
+[Warning: the options in this section generate parser code that is
+**not** platform-agnostic. Default ASCII parsing should be
+platform-independent.]
 
-The parser doesn't care about unicode or binary or any kind of
-encoding. The problem is the lexer.
+lemon-py parsers have _partial_, **experimental** support for UTF-8
+input languages on GCC and Clang platforms where
+`sizeof(wchar_t) == 4`. `std::u32string` support is _apparently_
+not sufficient, as `wchar_t` and `uchar32_t` are disjoint types
+even when they are the same size.
 
-For initial support, I started of course with `std::string`. This
-often works pretty well with UTF-8 unicode data.
+To enable unicode support, compile your grammar with the `--unicode`
+flag. This has two basic effects:
 
-The literal and string lexers are binary-clean, meaning they work
-equally well for binary and UTF-8 sequences as they do for ASCII
-sequences (although only ascii characters work as string
-delimiters/escapes).
+* lemon-py will use `wchar_t` and `wstring` internally to represent
+  all strings during the parsing process.
 
-lemon-py relies on the C++ `std::regex` facility throughout the
-lexer. That doesn't work so hot in utf-8.
+* lemon-py will assume the input is UTF-8 and _convert_ from UTF-8 to
+  UTF-32. It will do the opposite on output, encoding the entire parse
+  tree into UTF-8 before returning it.
 
-I'm working on switching to allow wide character support at minimum.
+Literal and string support work as expected. Those code paths are
+binary/utf-8 clean in 8-bit, so they're equally functional in 32-bit.
+
+Regex support is where things are lacking. lemon-py uses the C++
+`std::regex` package for all of its regular expressions. Regex support
+is only required, per the standard, for `char` and `wchar_t`. The
+`char` version is not UTF-8 aware, and so _in the regex definition
+itself_, it interprets characters with multiple codepoints as separate
+bytes. For sequences that works fine, but a pattern like `[тес]` does
+not match on one the visible characters, but any one of the 6 bytes
+that make up the utf-8 string "тес".
+
+Enabling `--unicode` on platforms where `wchar_t` is 4-bytes long
+_appears_ to make regex work properly with the non-ASCII European
+character sets I've tried. But features are limited. Many character
+classes are incomplete or incorrect, case conversion is undefined for
+most languages (meaning all unicode matches effectively behave as
+case-sensitive regardless of settings), you can easily get bad lexes
+with mixed kinds of whitespace, etc. Speakers of languages with
+disputes about their local alphabet order will need to consult a
+unicode reference.
+
+What almost certainly does not work is any unicode character that
+_still_ won't fit in a 4-byte word.
+
+You should only enable unicode support when you're actually parsing
+unicode, as just by default absolutely every string and character in
+the parser consumes 4x memory. It also introduces a number of copy
+operations when it needs to convert between UTF-8 and UTF-32
+internally, which can slow things down. Finally, it adds to the C++
+compile time for the finished parser module.
+
+Notes:
+
+* You do not need unicode support for your grammar to include its own
+  unicode string terminals. The canonical string support will catch
+  any ASCII-delimeter cleanly, and return the correct string even if
+  there are utf-8 characters in between.
+
+* "Real" unicode support, like integrating IUC, is entirely beyond the
+  scope of this project. This has already grown well beyond the little
+  "regex lexer + string tree" I had in mind when I started, and trying
+  to integreate compliant, normalizing unicode support into the
+  lemon-py "invisible" build-chain sounds like no fun at all.
 
 
 ## Motivation and Alternatives
-
 
 I want to play with definitions and implementations of programming
 languages. It's hard enough to invent an unambiguous, expressive
@@ -1029,6 +1075,9 @@ syntax left me undeterred from finishing.
     because I haven't written code on Windows in years. If you know
     how to do this, please submit a PR.
 
+    Also, parsers built for windows would be limited to ASCII parsing,
+    as Windows defines `sizeof(wchar_t) == 2`.
+
 
 * OSX support?
 
@@ -1059,7 +1108,7 @@ syntax left me undeterred from finishing.
   * That sounds like a lot of work with relatively minimal gains.
 
     The operator-overload DSL provided for use within grammar actions
-    is as terse as permitted by C++ and my cleverness, while still
+    is as terse as permitted by C++ and my cleverness while still
     providing full flexibility in parse tree structure. An automatic
     action-generation system would either impose unreasonably
     inflexible requirements on production structure (such as
