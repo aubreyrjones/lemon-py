@@ -127,7 +127,7 @@ def _gpp_command(module_name: str):
     pylink = subprocess.check_output(['python3-config', '--ldflags']).decode().strip()
 
     retval = [cpp_COMPILER]
-    retval.append('-g')
+    retval.append('-O2')
     retval.extend('-Wall -shared -std=c++17 -fPIC -fvisibility=hidden'.split())
     retval.extend(pyinclude.split())
     retval.extend(pylink.split())
@@ -149,10 +149,11 @@ def _concatenate_implementation(**kwargs):
 
     static_impl_text = _read_impl_and_replace_tokens()
 
-    if not kwargs.get('suppress_python', False):
+    if not kwargs.get('separate_interface', False):
         static_impl_text = static_impl_text.replace('#include <ParseNode.hpp>\n', _read_all(_data_file("ParseNode.hpp")))
-    else:
-        pass # retval += '#define LEMON_PY_SUPPRESS_PYTHON 1\n\n'
+
+    if kwargs.get('suppress_python', False):
+        retval += '#define LEMON_PY_SUPPRESS_PYTHON 1\n\n'
     
     if kwargs.get('use_unicode', False):
         retval += '#define LEMON_PY_UNICODE_SUPPORT 1\n\n'
@@ -274,12 +275,17 @@ if __name__ == '__main__':
     ap.add_argument('grammar_file', type=str, help="The grammar file to build.")
     args = ap.parse_args()
 
-    func_args = { 'install' : not args.noinstall, 
+    building_cpp = True if args.cpp else False
+
+    func_args = { 
+        'install' : not args.noinstall, 
         'use_unicode' : args.unicode, 
-        'cpp_dir' : os.path.abspath(args.cpp) if args.cpp else None, 
-        'suppress_python' : True if args.cpp else False,
+        'cpp_dir' : os.path.abspath(args.cpp) if building_cpp else None, 
+        'suppress_python' : building_cpp,
         'no_build' : args.nobuild,
-        'print_terminals' : args.terminals}
+        'print_terminals' : args.terminals,
+        'separate_interface' : building_cpp
+    }
 
     _chdir_and_build(args.grammar_file, not args.debug, **func_args)
 
