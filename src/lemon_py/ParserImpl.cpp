@@ -977,13 +977,19 @@ PYBIND11_MODULE(PYTHON_PARSER_MODULE_NAME, m) {
     py::class_<parser::ParseNode>(m, "Node")
     .def(py::init<>())
     .def("__repr__", [](parser::ParseNode const& pn) { return py::str(pn.toString()); }, "Get an approximation of the representation.", py::return_value_policy::take_ownership)
-    .def("__getitem__", [](parser::ParseNode const& pn, size_t item) -> parser::ParseNode const& { return pn[item]; }, "Get a child by index.", py::return_value_policy::reference_internal)
+    .def("__getitem__", 
+        [](parser::ParseNode const& pn, size_t item) -> parser::ParseNode const& {
+            //if (item >= pn.childCount()) return py::none();
+            return pn[item]; 
+        }, 
+        "Get a child by index.", py::return_value_policy::reference_internal)
     .def("__iter__", [](parser::ParseNode const& pn) { return py::make_iterator(pn.begin(), pn.end(), py::return_value_policy::reference_internal); }, "Children iterator.")
     .def("__len__", [](parser::ParseNode const& pn) { return pn.childCount(); }, "Get number of children.")
     .def("as_dict", &parser::ParseNode::asDict, "Make a deep copy of this node and all children to a dictionary representation. `.attr` is ref-copied, but not deep-copied. ", py::return_value_policy::take_ownership)
     .def(py::self == py::self)
     .def(py::self != py::self)
     .def_property_readonly("production", &parser::ParseNode::getProduction, "Get production if non-terminal.", py::return_value_policy::take_ownership) // these return copies of strings
+    .def_property_readonly("name", &parser::ParseNode::getProduction, "Get production if non-terminal. (alias for `.production`)", py::return_value_policy::take_ownership) // these return copies of strings
     .def_property_readonly("type", &parser::ParseNode::getToken, "Get type if terminal.", py::return_value_policy::take_ownership)
     .def_property_readonly("value", &parser::ParseNode::getValue, "Get value if terminal.", py::return_value_policy::take_ownership)
     .def_readonly("line", &parser::ParseNode::line, "Line number of appearance.")
