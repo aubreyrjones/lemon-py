@@ -157,7 +157,14 @@ def implement_lexdef_line(lexdef: tuple, uni: bool) -> str:
 
     return retval
 
-
+def lexer_report(lexdefs: List):
+    '''
+    Get the list of all defined tokens.
+    '''
+    return list(map(lambda ld: ld[1], lexdefs))
 
 def make_lexer(lemon_source: str, uni = False) -> str:
-    return LEXER_START + "\n".join(map(lambda ld: implement_lexdef_line(ld, uni), scan_lexer_def(lemon_source))) + LEXER_END
+    lexdefs = scan_lexer_def(lemon_source)
+    lexer_impl = LEXER_START + "\n".join(map(lambda ld: implement_lexdef_line(ld, uni), lexdefs)) + LEXER_END
+    report = lexer_report(lexdefs)
+    return (lexer_impl, report)

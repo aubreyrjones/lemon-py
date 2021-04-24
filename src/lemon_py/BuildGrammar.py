@@ -28,6 +28,7 @@ import pybind11
 import site
 import shutil
 import sys
+from typing import *
 
 from .BuildLexer import make_lexer
 
@@ -183,12 +184,12 @@ def _render_lemon_input(grammar_file_path: str, **kwargs):
     '''
     user_input = _read_all(grammar_file_path)
     mod = _extract_module(user_input)
-    lexer_def = make_lexer(user_input, kwargs.get('use_unicode', False))
+    lexer_def, lexer_report = make_lexer(user_input, kwargs.get('use_unicode', False))
     codegen_text = f"%include {{\n{lexer_def}\n}}\n"
 
     header_text = _read_all(GRAMMAR_HEADER_FILE)
 
-    return (mod, user_input + codegen_text + header_text)
+    return (mod, user_input + codegen_text + header_text, lexer_report)
 
 
 def _write_build_lemon_grammar(whole_text: str):
@@ -198,19 +199,23 @@ def _write_build_lemon_grammar(whole_text: str):
     _bootstrap_lemon()
     with open('concat_grammar.lemon', 'w') as f:
         f.write(whole_text)
-    subprocess.check_call([LEMON, f"-T{LEMON_TEMPLATE}", "concat_grammar.lemon"])
+    try:
+        subprocess.check_call([LEMON, f"-T{LEMON_TEMPLATE}", "concat_grammar.lemon"])
+    except:
+        print("Lemon found a problem with the grammar. See above.")
+        exit(1)
 
 
 def _render_buildable_module(grammar_file_path: str, **kwargs):
     '''
     Build the given module into a python module in the current directory.
     '''
-    module_name, rendered_grammar = _render_lemon_input(grammar_file_path, **kwargs)
+    module_name, rendered_grammar, lexer_report = _render_lemon_input(grammar_file_path, **kwargs)
     _write_build_lemon_grammar(rendered_grammar)
     full_impl = _concatenate_implementation(**kwargs)
     with open('concat_grammar.c', 'w') as f:
         f.write(full_impl)
-    return module_name
+    return (module_name, lexer_report)
 
 
 def _chdir_and_build(grammar_file_path, use_temp, **kwargs):
@@ -221,15 +226,20 @@ def _chdir_and_build(grammar_file_path, use_temp, **kwargs):
         if use_temp:
             os.chdir(workdir)
 
-        grammar_module_name = _render_buildable_module(grammar_file_path, **kwargs)
+        grammar_module_name, lexer_report = _render_buildable_module(grammar_file_path, **kwargs)
 
         if kwargs.get('print_terminals', False):
-            print_lang_header()
+            print_lang_header(lexer_report)
+            exit(0)
 
         if kwargs.get('cpp_dir', False):
             _copy_cpp_stuff(kwargs['cpp_dir'])
         elif not kwargs.get('no_build', False):
-            subprocess.check_call(_gpp_command(grammar_module_name))
+            try:
+                subprocess.check_call(_gpp_command(grammar_module_name))
+            except:
+                print("Error building C++ module. This often means you have a lexdef for a token not in your grammar, or that there's a syntax error in one of your grammar actions.")
+                exit(1)
             if kwargs.get('install', False):
                 soname = f"{grammar_module_name}.so"
                 shutil.copy2(soname, os.path.join(site.getusersitepackages(), soname))
@@ -244,15 +254,16 @@ def _lexdef_skeleton(tokname: str):
     return tokname + ":=".rjust(justlen) + " " + tokname.lower() + ":".rjust(justlen) + " [^\w_]"
 
 
-def print_lang_header():
+def print_lang_header(lexer_report: List[str]):
     '''
     Print out a list of all the token names that were defined by the grammar being built.
     '''
     with open('concat_grammar.h', 'r') as header_file:
         print("/*\n@pymod unnamed_language\n\n@lexdef\n\n!whitespace : \s+\n")
-        lines = map(lambda l: _lexdef_skeleton(l.split()[1].strip()), header_file.readlines())
-
-        print("\n".join(lines))
+        for l in header_file.readlines():
+            tokname = l.split()[1].strip()
+            if tokname in lexer_report: continue
+            print(_lexdef_skeleton(tokname))
         print("@endlex\n*/")
 
 # --------------
