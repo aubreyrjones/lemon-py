@@ -622,6 +622,7 @@ struct GrammarActionNodeHandle {
 
     // sugar
     GrammarActionNodeHandle& operator[](ChildrenPack const& toAppend);
+    GrammarActionNodeHandle operator[](size_t childIndex);
     GrammarActionNodeHandle& operator+=(GrammarActionNodeHandle & rhs);
     int operator~() const;
     //explicit GrammarActionNodeHandle& operator=(Token const& tok); //TODO: need `_` in scope somehow.
@@ -681,6 +682,10 @@ using ChildrenPack = GrammarActionNodeHandle::ChildrenPack;
 GrammarActionNodeHandle& GrammarActionNodeHandle::operator[](ChildrenPack const& toAppend) {
     node->append(toAppend);
     return *this;
+}
+
+GrammarActionNodeHandle GrammarActionNodeHandle::operator[](size_t childIndex) {
+    return node->children[childIndex];
 }
 
 GrammarActionNodeHandle& GrammarActionNodeHandle::operator+=(GrammarActionNodeHandle & rhs) {

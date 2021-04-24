@@ -736,26 +736,29 @@ Parse nodes created inside actions and from metavars on the right-hand
 side of the grammar production have several operations defined on
 them: 
 
-* First, they may be freely assigned to the metavar appearing on the
+* They may be freely assigned to the metavar appearing on the
   left-hand side of the production rule. This is, in fact, _required_
   in order to link the structures together through the parser's
   recursion. Every useful action will consist of an assignment to the
   left-hand metavar.
 
-* Second, they define a `node += node` operator that assigns the
+* They define a `node += node` operator that assigns the
   right-hand node as a child of the left-hand node, then returns the
   left-hand node.
 
-* Third, they define a prefix unary `~` (tilde) operator that reads
+* They define a prefix unary `~` (tilde) operator that reads
   the stored line number of an _existing_ node. Note that it doesn't
   "figure out" the line, it just copies through whatever was set in
   the node's constructor. This operator also works on tokens, which
   have a line number automatically set by the lexer.
 
-* Less frequently used is a subscript operator `node[{list, of,
-  children}]` that appends all of the listed nodes as children of
-  `node`, returning `node` (note the curly-brackets around the list
-  inside the square brackets).
+* They define a `node[index: int]` subscript operator for access to
+  children nodes.
+
+* Less frequently used is a multi-assignment operator
+  `node[{list, of, children}]` that appends all of the listed nodes as
+  children of `node`, returning `node` (note the curly-brackets around
+  the list inside the square brackets).
 
 A canonical left-recursive list might look something like this:
 
