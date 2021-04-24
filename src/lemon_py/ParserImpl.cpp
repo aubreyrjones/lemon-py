@@ -192,7 +192,7 @@ struct Token {
     */
     ustring toString() const {
         sstream valueStream;
-        valueStream << name() << "[line: ]" << line << " <" << value() << ">";
+        valueStream << name() << "[line: " << line << "] <" << value() << ">";
         return valueStream.str();
     }
 
