@@ -19,6 +19,7 @@ Features
   * grammar action micro-DSL
   * Python and C++17 interfaces
 
+[Pilot project](https://github.com/aubreyrjones/parasol/)
 
 # Overview
 
