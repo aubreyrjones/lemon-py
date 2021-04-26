@@ -621,9 +621,9 @@ struct GrammarActionNodeHandle {
     operator ParseNode*() { return node; }
 
     // sugar
-    GrammarActionNodeHandle& operator[](ChildrenPack const& toAppend);
     GrammarActionNodeHandle operator[](size_t childIndex);
     GrammarActionNodeHandle& operator+=(GrammarActionNodeHandle & rhs);
+    GrammarActionNodeHandle& operator+=(ChildrenPack const& rhs);
     int operator~() const;
     //explicit GrammarActionNodeHandle& operator=(Token const& tok); //TODO: need `_` in scope somehow.
 };
@@ -679,7 +679,7 @@ private:
 //using ChildrenPack = std::initializer_list<ParseNode*>;
 using ChildrenPack = GrammarActionNodeHandle::ChildrenPack;
 
-GrammarActionNodeHandle& GrammarActionNodeHandle::operator[](ChildrenPack const& toAppend) {
+GrammarActionNodeHandle& GrammarActionNodeHandle::operator+=(ChildrenPack const& toAppend) {
     node->append(toAppend);
     return *this;
 }

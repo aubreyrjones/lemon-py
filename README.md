@@ -747,6 +747,11 @@ them:
   right-hand node as a child of the left-hand node, then returns the
   left-hand node.
 
+* Less frequently used is a multi-assignment operator
+  `node += {list, of, children}` that appends all of the listed nodes
+  as children of `node`, returning `node` (note the curly-brackets
+  around the list).
+
 * They define a prefix unary `~` (tilde) operator that reads
   the stored line number of an _existing_ node. Note that it doesn't
   "figure out" the line, it just copies through whatever was set in
@@ -756,10 +761,6 @@ them:
 * They define a `node[index: int]` subscript operator for access to
   children nodes.
 
-* Less frequently used is a multi-assignment operator
-  `node[{list, of, children}]` that appends all of the listed nodes as
-  children of `node`, returning `node` (note the curly-brackets around
-  the list inside the square brackets).
 
 A canonical left-recursive list might look something like this:
 
